@@ -9,10 +9,10 @@ Feature: MySQL on OpenEBS with replication factor of 3
   I need to have MySQL running even when 33% of volume nodes are un-available
 
 #### Implementation
-- Step 1: Describe the scenario(s) in scenario.feature file
-- Step 2: Run **godog scenario.feature**
-- Step 3: Implement undefined steps (also referred to as snippets) in scenario_test.go file
-- Step 4: Re-Run **godog scenario.feature**
+- Step 1: Describe the scenario(s) in **e2e.feature** file
+- Step 2: Run **godog e2e.feature**
+- Step 3: Implement undefined steps (also referred to as snippets) in **e2e_test.go** file
+- Step 4: Re-Run **godog e2e.feature**
 
 #### Best Practices
 - 1: Make use of standard go practices
@@ -21,4 +21,3 @@ Feature: MySQL on OpenEBS with replication factor of 3
 
 #### References
 - https://github.com/DATA-DOG/godog
-- https://en.wikipedia.org/wiki/Literate_programming
