@@ -51,7 +51,7 @@ func (e *ShellExec) Output(args []string) (output string, err error) {
 
 	err = cmd.Run()
 	if err != nil {
-		err = fmt.Errorf(fmt.Sprint(err) + ": " + stderr.String())
+		err = fmt.Errorf("failed to run cmd '%s': %s: %s", cmd.Args, fmt.Sprint(err), stderr.String())
 		return
 	}
 

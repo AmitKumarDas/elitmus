@@ -1,12 +1,12 @@
 ### Scenario: MySQL with 3 openebs replicas
 
 #### Use-Case
-Feature: MySQL on OpenEBS with replication factor of 3
-  In order to test resiliency of MySQL on OpenEBS
+Feature: Test MySQL resiliency on Kubernetes PV
+  In order to test resiliency of MySQL on Kubernetes PV
   As an end user
-  I need to be able to launch MySQL on OpenEBS
-  I need to be able to use OpenEBS with replication factor of 3
-  I need to have MySQL running even when 33% of volume nodes are un-available
+  I need to be able to launch MySQL on Kubernetes PV
+  I need to be able to use PV with replication factor of 3
+  I need to have MySQL running even when 33% of volume replicas are un-available
 
 #### Implementation
 - Step 1: Describe the scenario(s) in **e2e.feature** file

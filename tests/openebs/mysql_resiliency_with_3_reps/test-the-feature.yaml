@@ -1,0 +1,116 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omrwtr-operator-verify
+  namespace: litmus
+  labels:
+    name: omrwtr-operator-verify
+    test: mysql-resiliency-with-3-reps
+data:
+  config: |-
+    components:
+      - kind: serviceaccount
+        name: openebs-maya-operator
+        namespace: default
+      - kind: clusterrole
+        name: openebs-maya-operator
+        namespace: default
+      - kind: clusterrolebinding
+        name: openebs-maya-operator
+        namespace: default
+      - kind: pod
+        labels: name=maya-apiserver
+        namespace: default
+      - kind: service
+        name: maya-apiserver-service
+        namespace: default
+      - kind: pod
+        labels: name=openebs-provisioner
+        namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omrwtr-application-verify
+  namespace: litmus
+  labels:
+    name: omrwtr-application-verify
+    test: mysql-resiliency-with-3-reps
+data:
+  config: |-
+    components:
+      - kind: service
+        name: omrwtr-percona-test
+      - kind: deploy
+        name: omrwtr-percona-test
+      - kind: pod
+        labels: name=omrwtr-percona-test
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omrwtr-volume-verify
+  namespace: litmus
+  labels:
+    name: omrwtr-volume-verify
+    test: mysql-resiliency-with-3-reps
+data:
+  config: |-
+    components:
+      - kind: pod
+        labels: openebs/controller=jiva-controller
+      - kind: pod
+        labels: openebs/replica=jiva-replica
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: omrwtr-test-the-feature
+  namespace: litmus
+  labels:
+    name: omrwtr-test-the-feature
+    test: mysql-resiliency-with-3-reps
+spec:
+  template:
+    spec:
+      serviceAccountName: litmus
+      containers:
+      - name: omrwtr-test-the-feature
+        image: openebs/litmus:latest
+        command: ["/bin/sh", "godog.sh", "./cmd/mysql_resiliency_with_3_reps"]
+        volumeMounts:
+        - mountPath: /etc/e2e/operator-verify
+          name: omrwtr-operator-verify
+        - mountPath: /etc/e2e/application-verify
+          name: omrwtr-application-verify
+        - mountPath: /etc/e2e/volume-verify
+          name: omrwtr-volume-verify
+        - mountPath: /etc/e2e/application-launch
+          name: omrwtr-application-launch
+      volumes:
+        - name: omrwtr-operator-verify
+          configMap: 
+            name: omrwtr-operator-verify
+            items:
+              - key: config
+                path: operator-verify.yaml
+        - name: omrwtr-application-verify
+          configMap: 
+            name: omrwtr-application-verify
+            items:
+              - key: config
+                path: application-verify.yaml
+        - name: omrwtr-volume-verify
+          configMap: 
+            name: omrwtr-volume-verify
+            items:
+              - key: config
+                path: volume-verify.yaml
+        - name: omrwtr-application-launch
+          configMap: 
+            name: omrwtr-application-launch
+            items:
+              - key: config
+                path: application-launch.yaml
+      restartPolicy: Never
