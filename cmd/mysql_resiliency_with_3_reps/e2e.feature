@@ -13,7 +13,7 @@ Feature: Test MySQL resiliency on Kubernetes PV
 
   Scenario: Kubernetes volume replicas should run on unique nodes
     Given mysql application is launched successfully on volume
-    Then verify there are three volume replicas
+    Then verify there are three replicas of volume deployment
     Then verify each volume replica gets a unique node
 
   Scenario: MySQL application should run when one volume replica is deleted

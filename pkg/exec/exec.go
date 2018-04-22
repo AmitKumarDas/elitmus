@@ -56,6 +56,8 @@ func (e *ShellExec) Output(args []string) (output string, err error) {
 		return
 	}
 
+	// This removes the beginning & trailing single quotes from the output
+	// It has been observed that kubectl execution results in such single quotes
 	output = strings.Trim(out.String(), "'")
 	return
 }

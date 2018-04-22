@@ -1,12 +1,10 @@
-### Test MySQL resiliency with 3 volume replicas
+### Test Minio deployment in Kubernetes
 
 #### Use-Case
-Feature: Test MySQL resiliency on Kubernetes PV
-  In order to test resiliency of MySQL on Kubernetes PV
+Feature: Test deployment of Minio on Kubernetes PV
+  In order to test deployment of Minio on Kubernetes PV
   As an end user
-  I need to be able to launch MySQL on Kubernetes PV
-  I need to be able to use PV with replication factor of 3
-  I need to have MySQL running even when 33% of volume replicas are un-available
+  I need to be able to launch Minio on Kubernetes PV
 
 #### Implementation
 - Step 1: Describe the scenario(s) in **e2e.feature** file

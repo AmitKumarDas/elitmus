@@ -25,7 +25,7 @@ import (
 )
 
 // KubectlFile is the type to hold various yaml file paths
-// that can be applied / executed by kubectl
+// that can be applied by kubectl
 type KubectlFile string
 
 const (
@@ -60,14 +60,11 @@ func kubectlArgs(args []string, namespace string, context string, labels string)
 type KubeRunner interface {
 	// Run executes the kubectl command
 	Run(args []string) (output string, err error)
-	// RunIt executes the kubectl command
-	//RunIt() (output string, err error)
 }
 
 // Kubectl holds the properties required to execute any kubectl command.
 // Kubectl is an implementation of following interfaces:
 // 1. KubeRunner
-// 2. KubeConnected
 type Kubectl struct {
 	// namespace where this kubectl command will be run
 	namespace string
@@ -136,14 +133,6 @@ func (k *Kubectl) Run(args []string) (output string, err error) {
 	output, err = k.executor.Output(k.args)
 	return
 }
-
-// RunIt will execute the kubectl command & provide output or error
-//func (k *Kubectl) RunIt() (output string, err error) {
-//	kargs := kubectlArgs(k.args, k.namespace, k.context, k.labels)
-
-//	output, err = k.executor.Output(kargs)
-//	return
-//}
 
 // IsPod flags if the provided kind is a kubernetes pod or is related
 // to a pod

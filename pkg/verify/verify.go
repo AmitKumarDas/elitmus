@@ -27,6 +27,8 @@ import (
 
 // VerifyFile type defines a yaml file path that represents an installation
 // and is used for various verification purposes
+//
+// A verify file is a yaml version of Installation struct
 type VerifyFile string
 
 // Condition type defines a condition that can be applied against a component
@@ -35,9 +37,13 @@ type Condition string
 
 const (
 	// UniqueNodeCond is a condition to check uniqueness of node
-	UniqueNodeCond Condition = "unique-node"
+	UniqueNodeCond Condition = "is-unique-node"
 	// ThreeReplicasCond is a condition to check if replica count is 3
-	ThreeReplicasCond Condition = "three-replicas"
+	ThreeReplicasCond Condition = "is-three-replicas"
+	// PVCBoundCond is a condition to check if PVC is bound
+	PVCBoundCond Condition = "is-pvc-bound"
+	// PVCUnBoundCond is a condition to check if PVC is unbound
+	PVCUnBoundCond Condition = "is-pvc-unbound"
 )
 
 // Action type defines a action that can be applied against a component
@@ -50,6 +56,12 @@ const (
 	// DeleteOldestPodAction is an action to delete the oldest pod
 	DeleteOldestPodAction Action = "delete-oldest-pod"
 )
+
+// DeleteVerifier provides contract(s) i.e. method signature(s) to evaluate
+// if an installation was deleted successfully
+type DeleteVerifier interface {
+	IsDeleted() (yes bool, err error)
+}
 
 // DeployVerifier provides contract(s) i.e. method signature(s) to evaluate
 // if an installation was deployed successfully
@@ -96,11 +108,14 @@ type DeployRunVerifier interface {
 // AllVerifier provides contract(s) i.e. method signature(s) to
 // evaluate:
 //
-// 1/ if an entity is deployed,
-// 2/ if the entity is running,
-// 3/ if the entity satisfies the provided condition &
-// 4/ if the entity satisfies the provided action
+// - if an entity is deleted,
+// - if an entity is deployed,
+// - if the entity is running,
+// - if the entity satisfies the provided condition &
+// - if the entity satisfies the provided action
 type AllVerifier interface {
+	// DeleteVerifier will check if the instance has been deleted or not
+	DeleteVerifier
 	// DeployVerifier will check if the instance has been deployed or not
 	DeployVerifier
 	// RunVerifier will check if the instance is in a running state or not
@@ -115,6 +130,11 @@ type AllVerifier interface {
 // Installation represents a set of components that represent an installation
 // e.g. an operator represented by its CRDs, RBACs and Deployments forms an
 // installation
+//
+// NOTE:
+//  Installation struct is accepted as a yaml file that is meant to be verified.
+// In addition this file allows the testing logic to take appropriate actions
+// as directed in the .feature file.
 type Installation struct {
 	// VerifyID is an identifier that is used to tie together related installations
 	// meant to be verified
@@ -150,6 +170,12 @@ type Component struct {
 	//
 	// NOTE:
 	//  Ensure unique alias values in an installation
+	//
+	// DETAILS:
+	//  This is the text which is typically understood by the end user. This text
+	// which will be set in the installation file against a particular component.
+	// Verification logic will filter the component based on this alias & run
+	// various checks &/or actions
 	Alias string `json:"alias"`
 }
 
@@ -213,6 +239,23 @@ func (v *KubeInstallVerify) IsDeployed() (yes bool, err error) {
 	return
 }
 
+// IsDeleted evaluates if all components of the installation are deleted
+func (v *KubeInstallVerify) IsDeleted() (yes bool, err error) {
+	if v.installation == nil {
+		err = fmt.Errorf("failed to check IsDeleted: installation object is nil")
+		return
+	}
+
+	for _, component := range v.installation.Components {
+		yes, err = v.isComponentDeleted(component)
+		if err != nil {
+			break
+		}
+	}
+
+	return
+}
+
 // IsRunning evaluates if all components of the installation are running
 func (v *KubeInstallVerify) IsRunning() (yes bool, err error) {
 	if v.installation == nil {
@@ -241,6 +284,10 @@ func (v *KubeInstallVerify) IsCondition(alias string, condition Condition) (yes 
 		return v.isEachComponentOnUniqueNode(alias)
 	case ThreeReplicasCond:
 		return v.hasComponentThreeReplicas(alias)
+	case PVCBoundCond:
+		return v.isPVCBound(alias)
+	case PVCUnBoundCond:
+		return v.isPVCUnBound(alias)
 	default:
 		err = fmt.Errorf("condition '%s' is not supported", condition)
 	}
@@ -358,6 +405,61 @@ func (v *KubeInstallVerify) getMatchingPodComponent(alias string) (comp Componen
 	return filtered[0], nil
 }
 
+// isComponentDeleted flags if a particular component is deleted
+func (v *KubeInstallVerify) isComponentDeleted(component Component) (yes bool, err error) {
+	var op string
+
+	if len(strings.TrimSpace(component.Kind)) == 0 {
+		err = fmt.Errorf("unable to verify component delete status: component kind is missing")
+		return
+	}
+
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify component delete status: either component name or its labels is required")
+		return
+	}
+
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		op, err = kubectl.New().
+			Namespace(component.Namespace).
+			Run([]string{"get", component.Kind, component.Name})
+
+		if err == nil {
+			err = fmt.Errorf("component '%s' is not deleted: '%s'", component.Name, op)
+			return
+		}
+
+		if strings.Contains(err.Error(), "(NotFound)") {
+			// yes, it is deleted
+			yes = true
+			return
+		}
+
+		err = fmt.Errorf("unable to verify component '%s' delete status: '%s'", component.Name, op)
+		return
+	}
+
+	// or check via labels
+	op, err = kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels).
+		Run([]string{"get", component.Kind})
+
+	if err != nil {
+		return
+	}
+
+	if strings.Contains(op, "No resources found") {
+		yes = true
+		return
+	}
+
+	err = fmt.Errorf("unable to verify component '%s' delete status: '%s'", component.Name, op)
+	return
+}
+
 // isComponentDeployed flags if a particular component is deployed
 func (v *KubeInstallVerify) isComponentDeployed(component Component) (yes bool, err error) {
 	var op string
@@ -423,6 +525,80 @@ func (v *KubeInstallVerify) isPodComponentRunning(component Component) (yes bool
 // hasComponentThreeReplicas flags if a component has three replicas
 func (v *KubeInstallVerify) hasComponentThreeReplicas(alias string) (yes bool, err error) {
 	err = fmt.Errorf("hasComponentThreeReplicas is not implemented")
+	return
+}
+
+// getPVCVolume fetches the PVC's volume
+func (v *KubeInstallVerify) getPVCVolume(alias string) (op string, err error) {
+	var filtered = []Component{}
+
+	// filter the components based on the provided alias
+	for _, c := range v.installation.Components {
+		if c.Alias == alias {
+			filtered = append(filtered, c)
+		}
+	}
+
+	if len(filtered) == 0 {
+		err = fmt.Errorf("unable to check pvc bound status: no component with alias '%s'", alias)
+		return
+	}
+
+	if len(filtered) > 1 {
+		err = fmt.Errorf("unable to check pvc bound status: more than one components found with alias '%s'", alias)
+		return
+	}
+
+	if len(filtered[0].Name) == 0 {
+		err = fmt.Errorf("unable to check pvc bound status: component name is required: '%#v'", filtered[0])
+		return
+	}
+
+	if filtered[0].Kind != "pvc" {
+		err = fmt.Errorf("unable to check pvc bound status: component is not a pvc resource: '%#v'", filtered[0])
+		return
+	}
+
+	op, err = kubectl.New().
+		Namespace(filtered[0].Namespace).
+		Run([]string{"get", "pvc", filtered[0].Name, "-o", "jsonpath='{.spec.volumeName}'"})
+
+	return
+}
+
+// isPVCBound flags if a PVC component is bound
+func (v *KubeInstallVerify) isPVCBound(alias string) (yes bool, err error) {
+	var vol string
+	vol, err = v.getPVCVolume(alias)
+	if err != nil {
+		return
+	}
+
+	// if no vol then pvc is not bound
+	if len(strings.TrimSpace(vol)) == 0 {
+		err = fmt.Errorf("pvc component is not bound")
+		return
+	}
+
+	yes = true
+	return
+}
+
+// isPVCUnBound flags if a PVC component is unbound
+func (v *KubeInstallVerify) isPVCUnBound(alias string) (yes bool, err error) {
+	var vol string
+	vol, err = v.getPVCVolume(alias)
+	if err != nil {
+		return
+	}
+
+	// if no vol then pvc is not bound
+	if len(strings.TrimSpace(vol)) != 0 {
+		err = fmt.Errorf("pvc component is bound")
+		return
+	}
+
+	yes = true
 	return
 }
 

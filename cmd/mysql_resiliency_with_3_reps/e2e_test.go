@@ -52,8 +52,20 @@ const (
 )
 
 const (
-	// VolumeReplicaAlias is the alias name given to a volume replica
+	// VolumeReplicaAlias is the alias name given to a volume replica pod
+	//
+	// This is the text which is typically understood by the end user. This text
+	// which will be set in the verify file against a particular component.
+	// Verification logic will filter the component based on this alias & run
+	// various checks &/or actions
 	VolumeReplicaAlias string = "volume-replica"
+	// VolumeDeploymentAlias is the alias name given to the volume replica deployment
+	//
+	// This is the text which is typically understood by the end user. This text
+	// which will be set in the verify file against a particular component.
+	// Verification logic will filter the component based on this alias & run
+	// various checks &/or actions
+	VolumeDeploymentAlias string = "volume-deployment"
 )
 
 type MySQLResiliencyWith3Reps struct {
@@ -194,14 +206,14 @@ func (e2e *MySQLResiliencyWith3Reps) verifyEachVolumeReplicaGetsAUniqueNode() (e
 	return
 }
 
-func (e2e *MySQLResiliencyWith3Reps) verifyThereAreThreeVolumeReplicas() (err error) {
+func (e2e *MySQLResiliencyWith3Reps) verifyThereAreThreeReplicasOfVolumeDeployment() (err error) {
 	if e2e.volVerifier == nil {
 		err = fmt.Errorf("nil volume verifier: possible error '%s'", e2e.errors[VolumeVerifyFileEI])
 		return
 	}
 
 	// is condition satisfied
-	_, err = e2e.volVerifier.IsCondition(VolumeReplicaAlias, verify.ThreeReplicasCond)
+	_, err = e2e.volVerifier.IsCondition(VolumeDeploymentAlias, verify.ThreeReplicasCond)
 	return
 }
 
@@ -249,5 +261,5 @@ func FeatureContext(s *godog.Suite) {
 	s.Step(`^verify all volume replicas are running$`, e2e.verifyAllVolumeReplicasAreRunning)
 	s.Step(`^I delete a volume replica$`, e2e.iDeleteAVolumeReplica)
 	s.Step(`^I delete another volume replica$`, e2e.iDeleteAnotherVolumeReplica)
-	s.Step(`^verify there are three volume replicas$`, e2e.verifyThereAreThreeVolumeReplicas)
+	s.Step(`^verify there are three replicas of volume deployment$`, e2e.verifyThereAreThreeReplicasOfVolumeDeployment)
 }
