@@ -31,6 +31,22 @@ spec:
   selector:
       name: omrwtr-percona-test
 ---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: omrwtr-percona-test
+  namespace: litmus
+  labels:
+    name: omrwtr-percona-test
+    test: mysql-resiliency-with-3-reps
+spec:
+  storageClassName: openebs-percona
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5G
+---
 apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
@@ -63,7 +79,7 @@ spec:
               value: k8sDem0
           ports:
             - containerPort: 3306
-              name: omrwtr-percona-test
+              name: omrwtr-test
           volumeMounts:
             - mountPath: /var/lib/mysql
               name: omrwtr-percona-test-vol
@@ -85,19 +101,3 @@ spec:
             items:
               - key: config
                 path: sql-test.sh
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: omrwtr-percona-test
-  namespace: litmus
-  labels:
-    name: omrwtr-percona-test
-    test: mysql-resiliency-with-3-reps
-spec:
-  storageClassName: openebs-percona
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5G

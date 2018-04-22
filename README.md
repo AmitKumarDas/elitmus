@@ -28,6 +28,7 @@ However, we can try to eliminate bugs if we are able to let the stakeholders par
   - NOTE: This is a one time activity
   - e.g. this installs openebs operator
   - `kubectl apply -f tests/openebs/openebs-operator-v0.5.3.yaml`
+  - `kubectl apply -f tests/openebs/openebs-storage-classes-v0.5.3.yaml`
 - Install RBAC policies required for K8s job to execute
   - NOTE: This is a one time activity
   - `kubectl apply -f rbac.yaml`

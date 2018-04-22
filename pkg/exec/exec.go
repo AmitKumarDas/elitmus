@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	osexec "os/exec"
+	"strings"
 )
 
 // Executor acts as a contract for various execution based logic
@@ -55,6 +56,6 @@ func (e *ShellExec) Output(args []string) (output string, err error) {
 		return
 	}
 
-	output = out.String()
+	output = strings.Trim(out.String(), "'")
 	return
 }

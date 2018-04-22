@@ -36,6 +36,8 @@ type Condition string
 const (
 	// UniqueNodeCond is a condition to check uniqueness of node
 	UniqueNodeCond Condition = "unique-node"
+	// ThreeReplicasCond is a condition to check if replica count is 3
+	ThreeReplicasCond Condition = "three-replicas"
 )
 
 // Action type defines a action that can be applied against a component
@@ -179,20 +181,17 @@ func load(file VerifyFile) (installation *Installation, err error) {
 type KubeInstallVerify struct {
 	// installation is the set of components that determine the install
 	installation *Installation
-	// kubectl enables execution of kubernetes operations
-	kubectl kubectl.KubeRunner
 }
 
 // NewKubeInstallVerify provides a new instance of NewKubeInstallVerify based on
 // the provided kubernetes runner & verify file
-func NewKubeInstallVerify(runner kubectl.KubeRunner, file VerifyFile) (*KubeInstallVerify, error) {
+func NewKubeInstallVerify(file VerifyFile) (*KubeInstallVerify, error) {
 	i, err := load(file)
 	if err != nil {
 		return nil, err
 	}
 
 	return &KubeInstallVerify{
-		kubectl:      runner,
 		installation: i,
 	}, nil
 }
@@ -222,6 +221,10 @@ func (v *KubeInstallVerify) IsRunning() (yes bool, err error) {
 	}
 
 	for _, component := range v.installation.Components {
+		if component.Kind != "pod" {
+			continue
+		}
+
 		yes, err = v.isPodComponentRunning(component)
 		if err != nil {
 			break
@@ -236,6 +239,8 @@ func (v *KubeInstallVerify) IsCondition(alias string, condition Condition) (yes 
 	switch condition {
 	case UniqueNodeCond:
 		return v.isEachComponentOnUniqueNode(alias)
+	case ThreeReplicasCond:
+		return v.hasComponentThreeReplicas(alias)
 	default:
 		err = fmt.Errorf("condition '%s' is not supported", condition)
 	}
@@ -269,7 +274,8 @@ func (v *KubeInstallVerify) isDeleteAnyRunningPod(alias string) (yes bool, err e
 		return
 	}
 
-	pods, err = kubectl.GetRunningPods(v.kubectl, c.Namespace, c.Labels)
+	k := kubectl.New().Namespace(c.Namespace).Labels(c.Labels)
+	pods, err = kubectl.GetRunningPods(k)
 	if err != nil {
 		return
 	}
@@ -280,7 +286,8 @@ func (v *KubeInstallVerify) isDeleteAnyRunningPod(alias string) (yes bool, err e
 	}
 
 	// delete any running pod
-	err = kubectl.DeletePod(v.kubectl, pods[0], c.Namespace)
+	k = kubectl.New().Namespace(c.Namespace)
+	err = kubectl.DeletePod(k, pods[0])
 	if err != nil {
 		return
 	}
@@ -289,7 +296,7 @@ func (v *KubeInstallVerify) isDeleteAnyRunningPod(alias string) (yes bool, err e
 	return
 }
 
-// isDeleteOldestRunningPod deletes the oldeset pod based on the alias
+// isDeleteOldestRunningPod deletes the oldset pod based on the alias
 func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, err error) {
 	var pod string
 
@@ -305,7 +312,8 @@ func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, er
 	}
 
 	// fetch oldest running pod
-	pod, err = kubectl.GetOldestRunningPod(v.kubectl, c.Namespace, c.Labels)
+	k := kubectl.New().Namespace(c.Namespace).Labels(c.Labels)
+	pod, err = kubectl.GetOldestRunningPod(k)
 	if err != nil {
 		return
 	}
@@ -316,7 +324,8 @@ func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, er
 	}
 
 	// delete oldest running pod
-	err = kubectl.DeletePod(v.kubectl, pod, c.Namespace)
+	k = kubectl.New().Namespace(c.Namespace)
+	err = kubectl.DeletePod(k, pod)
 	if err != nil {
 		return
 	}
@@ -351,27 +360,70 @@ func (v *KubeInstallVerify) getMatchingPodComponent(alias string) (comp Componen
 
 // isComponentDeployed flags if a particular component is deployed
 func (v *KubeInstallVerify) isComponentDeployed(component Component) (yes bool, err error) {
-	return kubectl.IsResourceDeployed(v.kubectl, component.Kind, component.Name, component.Namespace, component.Labels)
+	var op string
+
+	if len(strings.TrimSpace(component.Kind)) == 0 {
+		err = fmt.Errorf("unable to verify component deploy status: component kind is missing")
+		return
+	}
+
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify component deploy status: either component name or its labels is required")
+		return
+	}
+
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		op, err = kubectl.New().
+			Namespace(component.Namespace).
+			Run([]string{"get", component.Kind, component.Name, "-o", "jsonpath='{.metadata.name}'"})
+
+		if err == nil && len(strings.TrimSpace(op)) != 0 {
+			// yes, it is deployed
+			yes = true
+		}
+		return
+	}
+
+	// or check via labels
+	op, err = kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels).
+		Run([]string{"get", component.Kind, "-o", "jsonpath='{.items[*].metadata.name}'"})
+
+	if err == nil && len(strings.TrimSpace(op)) != 0 {
+		// yes, it is deployed
+		yes = true
+	}
+	return
 }
 
 // isPodComponentRunning flags if a particular component is running
 func (v *KubeInstallVerify) isPodComponentRunning(component Component) (yes bool, err error) {
-	if len(strings.TrimSpace(component.Kind)) == 0 {
-		err = fmt.Errorf("unable to verify component running status: component kind is required")
-	}
-
-	// return true for non pod components
-	if !kubectl.IsPod(component.Kind) {
-		yes = true
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify pod component running status: either name or its labels is required")
 		return
 	}
 
-	// if pod then verify if its running
-	if len(strings.TrimSpace(component.Labels)) == 0 {
-		err = fmt.Errorf("unable to verify component '%s' running status: component labels are required", component.Kind)
-		return
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		k := kubectl.New().Namespace(component.Namespace)
+		return kubectl.IsPodRunning(k, component.Name)
 	}
-	return kubectl.ArePodsRunning(v.kubectl, component.Namespace, component.Labels)
+
+	// or check via labels
+	k := kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels)
+	return kubectl.ArePodsRunning(k)
+}
+
+// hasComponentThreeReplicas flags if a component has three replicas
+func (v *KubeInstallVerify) hasComponentThreeReplicas(alias string) (yes bool, err error) {
+	err = fmt.Errorf("hasComponentThreeReplicas is not implemented")
+	return
 }
 
 // isEachComponentOnUniqueNode flags if each component is placed on unique node
@@ -398,7 +450,8 @@ func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, err
 			return false, fmt.Errorf("unable to fetch component '%s' node: component labels are required", f.Kind)
 		}
 
-		n, err := kubectl.GetPodNodes(v.kubectl, f.Namespace, f.Labels)
+		k := kubectl.New().Namespace(f.Namespace).Labels(f.Labels)
+		n, err := kubectl.GetPodNodes(k)
 		if err != nil {
 			return false, err
 		}
@@ -420,22 +473,16 @@ func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, err
 
 // KubeConnectionVerify provides methods that verifies connection to a kubernetes
 // environment
-type KubeConnectionVerify struct {
-	// kubectl enables execution of kubernetes operations
-	kubectl kubectl.KubeRunner
-}
+type KubeConnectionVerify struct{}
 
-// NewKubeConnectionVerify provides a new instance of KubeConnectionVerify based on the provided
-// kubernetes runner
-func NewKubeConnectionVerify(runner kubectl.KubeRunner) *KubeConnectionVerify {
-	return &KubeConnectionVerify{
-		kubectl: runner,
-	}
+// NewKubeConnectionVerify provides a new instance of KubeConnectionVerify
+func NewKubeConnectionVerify() *KubeConnectionVerify {
+	return &KubeConnectionVerify{}
 }
 
 // IsConnected verifies if kubectl can connect to the target Kubernetes cluster
 func (k *KubeConnectionVerify) IsConnected() (yes bool, err error) {
-	_, err = k.kubectl.Run([]string{"get", "pods"}, "", "")
+	_, err = kubectl.New().Run([]string{"get", "pods"})
 	if err == nil {
 		yes = true
 	}

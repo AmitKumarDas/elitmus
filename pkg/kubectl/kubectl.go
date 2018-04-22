@@ -58,7 +58,10 @@ func kubectlArgs(args []string, namespace string, context string, labels string)
 // KubeRunner interface provides the contract i.e. method signature to
 // invoke commands at kubernetes cluster
 type KubeRunner interface {
-	Run(args []string, namespace, labels string) (output string, err error)
+	// Run executes the kubectl command
+	Run(args []string) (output string, err error)
+	// RunIt executes the kubectl command
+	//RunIt() (output string, err error)
 }
 
 // Kubectl holds the properties required to execute any kubectl command.
@@ -68,8 +71,12 @@ type KubeRunner interface {
 type Kubectl struct {
 	// namespace where this kubectl command will be run
 	namespace string
+	// labels to be used during kubectl execution
+	labels string
 	// context where this kubectl command will be run
 	context string
+	// args are provided to kubectl command during its run
+	args []string
 	// executor does actual kubectl execution
 	executor exec.Executor
 }
@@ -87,34 +94,56 @@ func GetKubectlPath() string {
 	return kpath
 }
 
-// NewKubectl will return a new instance of kubectl based on the provided
-// information i.e. namespace, context.
-func NewKubectl(namespace string, context string) *Kubectl {
-	if len(namespace) == 0 {
-		namespace = DefaultLitmusNamespace
-	}
-
+// New returns a new instance of kubectl based on defaults
+func New() *Kubectl {
 	return &Kubectl{
-		namespace: namespace,
-		context:   context,
+		namespace: DefaultLitmusNamespace,
 		executor:  exec.NewShellExec(GetKubectlPath()),
 	}
 }
 
-// Run will execute the kubectl command & provide output or error
-func (k *Kubectl) Run(args []string, namespace, labels string) (output string, err error) {
-	// set namespace to the one provided at runtime
-	ns := namespace
-	if len(ns) == 0 {
-		// or set it to the one set during initialization
-		ns = k.namespace
+// Namespace sets the namespace to be used during kubectl run
+func (k *Kubectl) Namespace(namespace string) *Kubectl {
+	if len(namespace) == 0 {
+		return k
 	}
+	k.namespace = namespace
+	return k
+}
 
-	kargs := kubectlArgs(args, ns, k.context, labels)
+// Labels sets the labels to be used during kubectl run
+func (k *Kubectl) Labels(labels string) *Kubectl {
+	k.labels = labels
+	return k
+}
 
-	output, err = k.executor.Output(kargs)
+// Context sets the context to be used during kubectl run
+func (k *Kubectl) Context(context string) *Kubectl {
+	k.context = context
+	return k
+}
+
+// Args sets the args to be used during kubectl run
+func (k *Kubectl) Args(args []string) *Kubectl {
+	k.args = args
+	return k
+}
+
+// Run will execute the kubectl command & provide output or error
+func (k *Kubectl) Run(args []string) (output string, err error) {
+	k.args = kubectlArgs(args, k.namespace, k.context, k.labels)
+
+	output, err = k.executor.Output(k.args)
 	return
 }
+
+// RunIt will execute the kubectl command & provide output or error
+//func (k *Kubectl) RunIt() (output string, err error) {
+//	kargs := kubectlArgs(k.args, k.namespace, k.context, k.labels)
+
+//	output, err = k.executor.Output(kargs)
+//	return
+//}
 
 // IsPod flags if the provided kind is a kubernetes pod or is related
 // to a pod
@@ -126,39 +155,6 @@ func IsPod(kind string) (yes bool) {
 		yes = false
 	}
 
-	return
-}
-
-// IsResourceDeployed will return true if a resource is available. It tries to
-// find the resource based on its name or its labels
-func IsResourceDeployed(k KubeRunner, kind, name, namespace, labels string) (yes bool, err error) {
-	var op string
-
-	if len(strings.TrimSpace(kind)) == 0 {
-		err = fmt.Errorf("unable to verify resource deploy status: resource kind is missing")
-		return
-	}
-
-	// either name or labels is required
-	if len(strings.TrimSpace(name)) == 0 && len(strings.TrimSpace(labels)) == 0 {
-		err = fmt.Errorf("unable to verify resource deploy status: either component name or its labels is required")
-		return
-	}
-
-	// check via name
-	if len(strings.TrimSpace(name)) != 0 {
-		op, err = k.Run([]string{"get", kind, name, "-o", "jsonpath='{.metadata.name}'"}, namespace, "")
-		if err == nil && len(strings.TrimSpace(op)) != 0 {
-			yes = true
-		}
-		return
-	}
-
-	// check via labels
-	op, err = k.Run([]string{"get", kind, "-o", "jsonpath='{.items[*].metadata.name}'"}, namespace, labels)
-	if err == nil && len(strings.TrimSpace(op)) != 0 {
-		yes = true
-	}
 	return
 }
 
@@ -175,8 +171,8 @@ func IsResourceDeployed(k KubeRunner, kind, name, namespace, labels string) (yes
 //
 // $ kubectl get pods -n kube-system --selector=k8s-app=kube-dns -o jsonpath='{.items[*].status.containerStatuses[*].ready}'
 // true false true
-func ArePodsRunning(k KubeRunner, namespace, labels string) (yes bool, err error) {
-	isReady, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].status.containerStatuses[*].ready}'"}, namespace, labels)
+func ArePodsRunning(k KubeRunner) (yes bool, err error) {
+	isReady, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].status.containerStatuses[*].ready}'"})
 	if err != nil {
 		return
 	}
@@ -185,7 +181,7 @@ func ArePodsRunning(k KubeRunner, namespace, labels string) (yes bool, err error
 	isReadyArr := strings.Split(isReady, " ")
 
 	if contains(isReadyArr, "false") {
-		err = fmt.Errorf("pod(s) with labels '%s' are not running: '%s'", labels, isReady)
+		err = fmt.Errorf("pod(s) are not running: '%#v' '%#v'", k, isReadyArr)
 		return
 	}
 
@@ -193,7 +189,7 @@ func ArePodsRunning(k KubeRunner, namespace, labels string) (yes bool, err error
 	if contains(isReadyArr, "true") {
 		yes = true
 	} else {
-		err = fmt.Errorf("status of pod(s) with labels '%s' could not be determined: received output '%s'", labels, isReady)
+		err = fmt.Errorf("status of pod(s) could not be determined: '%#v' '%#v'", k, isReadyArr)
 	}
 
 	return
@@ -212,8 +208,13 @@ func ArePodsRunning(k KubeRunner, namespace, labels string) (yes bool, err error
 //
 // $ kubectl get pods -n kube-system my-pod -o jsonpath='{.status.containerStatuses[*].ready}'
 // true false true
-func IsPodRunning(k KubeRunner, name, namespace string) (yes bool, err error) {
-	isReady, err := k.Run([]string{"get", "pods", name, "-o", "jsonpath='{.status.containerStatuses[*].ready}'"}, namespace, "")
+func IsPodRunning(k KubeRunner, name string) (yes bool, err error) {
+	if len(name) == 0 {
+		err = fmt.Errorf("unable to determine pod running status: pod name is missing")
+		return
+	}
+
+	isReady, err := k.Run([]string{"get", "pods", name, "-o", "jsonpath='{.status.containerStatuses[*].ready}'"})
 	if err != nil {
 		return
 	}
@@ -222,7 +223,7 @@ func IsPodRunning(k KubeRunner, name, namespace string) (yes bool, err error) {
 	isReadyArr := strings.Split(isReady, " ")
 
 	if contains(isReadyArr, "false") {
-		err = fmt.Errorf("pod '%s' is not running: '%s'", name, isReady)
+		err = fmt.Errorf("pod '%s' is not running: '%#v'", name, isReadyArr)
 		return
 	}
 
@@ -230,7 +231,7 @@ func IsPodRunning(k KubeRunner, name, namespace string) (yes bool, err error) {
 	if contains(isReadyArr, "true") {
 		yes = true
 	} else {
-		err = fmt.Errorf("status of pod '%s' could not be determined: received output '%s'", name, isReady)
+		err = fmt.Errorf("status of pod '%s' could not be determined: received output '%#v'", name, isReadyArr)
 	}
 
 	return
@@ -238,21 +239,20 @@ func IsPodRunning(k KubeRunner, name, namespace string) (yes bool, err error) {
 
 // GetPodNodes fetches the nodes that hosts the pods. Pods are referred to
 // via the provided labels
-func GetPodNodes(k KubeRunner, namespace, labels string) (nodes []string, err error) {
-	n, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].spec.nodeName}'"}, namespace, labels)
+func GetPodNodes(k KubeRunner) (nodes []string, err error) {
+	n, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].spec.nodeName}'"})
 	if err != nil {
 		return
 	}
 
 	// split the output by space
 	nodes = strings.Split(n, " ")
-
 	return
 }
 
 // GetPods fetches the pods based on the provided labels
-func GetPods(k KubeRunner, namespace, labels string) (pods []string, err error) {
-	p, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].metadata.name}'"}, namespace, labels)
+func GetPods(k KubeRunner) (pods []string, err error) {
+	p, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].metadata.name}'"})
 	if err != nil {
 		return
 	}
@@ -269,9 +269,9 @@ func GetPods(k KubeRunner, namespace, labels string) (pods []string, err error) 
 //
 // $ JSONPATH='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'  && kubectl get po -n kube-system -o jsonpath="$JSONPATH"
 // kube-addon-manager-amit-thinkpad-l470::true::::kube-dns-54cccfbdf8-q7v2c::false false true::::kubernetes-dashboard-77d8b98585-cwbjq::false::::storage-provisioner::true::::tiller-deploy-5b48764ff7-g9qz7::true::::
-func GetRunningPods(k KubeRunner, namespace, labels string) (pods []string, err error) {
+func GetRunningPods(k KubeRunner) (pods []string, err error) {
 	// fetch pods
-	o, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"}, namespace, labels)
+	o, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"})
 	if err != nil {
 		return
 	}
@@ -305,9 +305,9 @@ func GetRunningPods(k KubeRunner, namespace, labels string) (pods []string, err 
 //
 // $ JSONPATH='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'  && kubectl get po -n kube-system --sort-by=.metadata.creationTimestamp -o jsonpath="$JSONPATH"
 // kube-addon-manager-amit-thinkpad-l470::true::::kube-dns-54cccfbdf8-q7v2c::false false true::::kubernetes-dashboard-77d8b98585-cwbjq::false::::storage-provisioner::true::::tiller-deploy-5b48764ff7-g9qz7::true::::
-func GetOldestRunningPod(k KubeRunner, namespace, labels string) (pod string, err error) {
+func GetOldestRunningPod(k KubeRunner) (pod string, err error) {
 	// fetch pods sorted by creation timestamp
-	o, err := k.Run([]string{"get", "pods", "-o", "--sort-by=.metadata.creationTimestamp", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"}, namespace, labels)
+	o, err := k.Run([]string{"get", "pods", "-o", "--sort-by=.metadata.creationTimestamp", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"})
 	if err != nil {
 		return
 	}
@@ -336,8 +336,8 @@ func GetOldestRunningPod(k KubeRunner, namespace, labels string) (pod string, er
 }
 
 // DeletePod deletes the specified pod
-func DeletePod(k KubeRunner, name, namespace string) (err error) {
-	_, err = k.Run([]string{"delete", "pods", name}, namespace, "")
+func DeletePod(k KubeRunner, name string) (err error) {
+	_, err = k.Run([]string{"delete", "pods", name})
 	return
 }
 

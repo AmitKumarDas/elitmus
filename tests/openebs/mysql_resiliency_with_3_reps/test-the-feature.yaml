@@ -28,6 +28,8 @@ data:
       - kind: pod
         labels: name=openebs-provisioner
         namespace: default
+      - kind: sc
+        name: openebs-percona
 ---
 apiVersion: v1
 kind: ConfigMap

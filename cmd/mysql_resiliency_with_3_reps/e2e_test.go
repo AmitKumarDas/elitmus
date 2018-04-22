@@ -21,9 +21,9 @@ import (
 
 	"github.com/AmitKumarDas/litmus/pkg/kubectl"
 	"github.com/AmitKumarDas/litmus/pkg/time"
-	"github.com/AmitKumarDas/litmus/pkg/util"
 	"github.com/AmitKumarDas/litmus/pkg/verify"
 	"github.com/DATA-DOG/godog"
+	"github.com/DATA-DOG/godog/gherkin"
 )
 
 // errorIdentity marks an error to a unique identity
@@ -57,39 +57,19 @@ const (
 )
 
 type MySQLResiliencyWith3Reps struct {
-	// kubectl instance enables running kubectl operations
-	kubectl kubectl.KubeRunner
-	// kubeConnectionVerifier instance helps in verifying connection to kubernetes
-	// cluster
-	kubeConnectionVerifier verify.ConnectVerifier
 	// appVerifier instance enables verification of application components
 	appVerifier verify.DeployRunVerifier
 	// volVerifier instance enables verification of volume components
 	volVerifier verify.AllVerifier
 	// operatorVerifier instance enables verification of operator components
 	operatorVerifier verify.DeployRunVerifier
-	// lastError holds the previos error
-	lastError error
 	// errors hold the previous error(s)
 	errors map[errorIdentity]error
 }
 
-func (e2e *MySQLResiliencyWith3Reps) withKubernetes() {
-	// build a kubectl instance using namespace & context from environment
-	// variables; will use default namespace & context if not provided
-	k := kubectl.NewKubectl(util.KubeNamespaceENV(), util.KubeContextENV())
-	e2e.kubectl = k
-}
-
-func (e2e *MySQLResiliencyWith3Reps) withKubeConnectionVerifier() {
-	k := verify.NewKubeConnectionVerify(e2e.kubectl)
-	e2e.kubeConnectionVerifier = k
-}
-
 func (e2e *MySQLResiliencyWith3Reps) withOperatorVerifier() {
-	o, err := verify.NewKubeInstallVerify(e2e.kubectl, OperatorMF)
+	o, err := verify.NewKubeInstallVerify(OperatorMF)
 	if err != nil {
-		e2e.lastError = err
 		e2e.errors[OperatorVerifyFileEI] = err
 		return
 	}
@@ -97,9 +77,8 @@ func (e2e *MySQLResiliencyWith3Reps) withOperatorVerifier() {
 }
 
 func (e2e *MySQLResiliencyWith3Reps) withApplicationVerifier() {
-	a, err := verify.NewKubeInstallVerify(e2e.kubectl, ApplicationMF)
+	a, err := verify.NewKubeInstallVerify(ApplicationMF)
 	if err != nil {
-		e2e.lastError = err
 		e2e.errors[ApplicationVerifyFileEI] = err
 		return
 	}
@@ -107,23 +86,22 @@ func (e2e *MySQLResiliencyWith3Reps) withApplicationVerifier() {
 }
 
 func (e2e *MySQLResiliencyWith3Reps) withVolumeVerifier() {
-	v, err := verify.NewKubeInstallVerify(e2e.kubectl, VolumeMF)
+	v, err := verify.NewKubeInstallVerify(VolumeMF)
 	if err != nil {
-		e2e.lastError = err
 		e2e.errors[VolumeVerifyFileEI] = err
 		return
 	}
 	e2e.volVerifier = v
 }
 
-func (e2e *MySQLResiliencyWith3Reps) iHaveAKubernetesClusterWithVolumeOperatorInstalled() (err error) {
-	if e2e.kubeConnectionVerifier == nil {
-		err = fmt.Errorf("nil kubernetes connection verifier")
-		return
-	}
+func (e2e *MySQLResiliencyWith3Reps) tearDown(f *gherkin.Feature) {
+	kubectl.New().Run([]string{"delete", "-f", string(ApplicationKF)})
+}
 
+func (e2e *MySQLResiliencyWith3Reps) iHaveAKubernetesClusterWithVolumeOperatorInstalled() (err error) {
+	kconnVerifier := verify.NewKubeConnectionVerify()
 	// checks if kubernetes cluster is available & is connected
-	_, err = e2e.kubeConnectionVerifier.IsConnected()
+	_, err = kconnVerifier.IsConnected()
 	if err != nil {
 		return
 	}
@@ -147,7 +125,7 @@ func (e2e *MySQLResiliencyWith3Reps) iHaveAKubernetesClusterWithVolumeOperatorIn
 
 func (e2e *MySQLResiliencyWith3Reps) iLaunchMysqlApplicationOnVolume() (err error) {
 	// do a kubectl apply of application yaml
-	_, err = e2e.kubectl.Run([]string{"apply", "-f", string(ApplicationKF)}, "", "")
+	_, err = kubectl.New().Run([]string{"apply", "-f", string(ApplicationKF)})
 	return
 }
 
@@ -216,6 +194,17 @@ func (e2e *MySQLResiliencyWith3Reps) verifyEachVolumeReplicaGetsAUniqueNode() (e
 	return
 }
 
+func (e2e *MySQLResiliencyWith3Reps) verifyThereAreThreeVolumeReplicas() (err error) {
+	if e2e.volVerifier == nil {
+		err = fmt.Errorf("nil volume verifier: possible error '%s'", e2e.errors[VolumeVerifyFileEI])
+		return
+	}
+
+	// is condition satisfied
+	_, err = e2e.volVerifier.IsCondition(VolumeReplicaAlias, verify.ThreeReplicasCond)
+	return
+}
+
 func (e2e *MySQLResiliencyWith3Reps) iDeleteAVolumeReplica() (err error) {
 	if e2e.volVerifier == nil {
 		err = fmt.Errorf("nil volume verifier: possible error '%s'", e2e.errors[VolumeVerifyFileEI])
@@ -243,11 +232,11 @@ func FeatureContext(s *godog.Suite) {
 		errors: map[errorIdentity]error{},
 	}
 
-	s.BeforeSuite(e2e.withKubernetes)
-	s.BeforeSuite(e2e.withKubeConnectionVerifier)
 	s.BeforeSuite(e2e.withOperatorVerifier)
 	s.BeforeSuite(e2e.withApplicationVerifier)
 	s.BeforeSuite(e2e.withVolumeVerifier)
+
+	s.AfterFeature(e2e.tearDown)
 
 	// this associates the specs with corresponding methods of mysqlResiliencyWith3Reps
 	s.Step(`^I have a kubernetes cluster with volume operator installed$`, e2e.iHaveAKubernetesClusterWithVolumeOperatorInstalled)
@@ -260,4 +249,5 @@ func FeatureContext(s *godog.Suite) {
 	s.Step(`^verify all volume replicas are running$`, e2e.verifyAllVolumeReplicasAreRunning)
 	s.Step(`^I delete a volume replica$`, e2e.iDeleteAVolumeReplica)
 	s.Step(`^I delete another volume replica$`, e2e.iDeleteAnotherVolumeReplica)
+	s.Step(`^verify there are three volume replicas$`, e2e.verifyThereAreThreeVolumeReplicas)
 }

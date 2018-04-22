@@ -8,11 +8,12 @@ Feature: Test MySQL resiliency on Kubernetes PV
   Scenario: launch MySQL on Kubernetes PV
     Given I have a kubernetes cluster with volume operator installed
     When I launch mysql application on volume
-    Then wait for "60s"
+    Then wait for "300s"
     And verify mysql application is launched successfully on volume
 
   Scenario: Kubernetes volume replicas should run on unique nodes
     Given mysql application is launched successfully on volume
+    Then verify there are three volume replicas
     Then verify each volume replica gets a unique node
 
   Scenario: MySQL application should run when one volume replica is deleted
