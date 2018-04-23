@@ -79,7 +79,7 @@ type MinioLaunch struct {
 	errors map[errorIdentity]error
 }
 
-func (e2e *MinioLaunch) withOperatorVerifier() {
+func (e2e *MinioLaunch) withOperatorVerifier(f *gherkin.Feature) {
 	o, err := verify.NewKubeInstallVerify(OperatorMF)
 	if err != nil {
 		e2e.errors[OperatorVerifyFileEI] = err
@@ -88,7 +88,7 @@ func (e2e *MinioLaunch) withOperatorVerifier() {
 	e2e.operatorVerifier = o
 }
 
-func (e2e *MinioLaunch) withApplicationVerifier() {
+func (e2e *MinioLaunch) withApplicationVerifier(f *gherkin.Feature) {
 	a, err := verify.NewKubeInstallVerify(ApplicationMF)
 	if err != nil {
 		e2e.errors[ApplicationVerifyFileEI] = err
@@ -97,7 +97,7 @@ func (e2e *MinioLaunch) withApplicationVerifier() {
 	e2e.appVerifier = a
 }
 
-func (e2e *MinioLaunch) withVolumeVerifier() {
+func (e2e *MinioLaunch) withVolumeVerifier(f *gherkin.Feature) {
 	v, err := verify.NewKubeInstallVerify(VolumeMF)
 	if err != nil {
 		e2e.errors[VolumeVerifyFileEI] = err
@@ -266,9 +266,9 @@ func FeatureContext(s *godog.Suite) {
 		errors: map[errorIdentity]error{},
 	}
 
-	s.BeforeSuite(e2e.withOperatorVerifier)
-	s.BeforeSuite(e2e.withApplicationVerifier)
-	s.BeforeSuite(e2e.withVolumeVerifier)
+	s.BeforeFeature(e2e.withOperatorVerifier)
+	s.BeforeFeature(e2e.withApplicationVerifier)
+	s.BeforeFeature(e2e.withVolumeVerifier)
 
 	s.AfterFeature(e2e.tearDown)
 

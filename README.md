@@ -12,6 +12,13 @@ However, we can try to eliminate bugs if we are able to let the stakeholders par
 
 ## Development
 
+### Pre-Requisites
+- go
+  - refer this project's Makefile for details
+- docker
+- kubectl
+- a kubernetes cluster
+
 ### Compile
 - Make use of Makefile
 - Run below command to compile the code
@@ -23,29 +30,52 @@ However, we can try to eliminate bugs if we are able to let the stakeholders par
 
 ## Run
 
-### Run a specific testcase as a Kubernetes Job
-- Assumption: Provider specific K8s resources should be deployed
-  - NOTE: This is a one time activity
-  - e.g. this installs openebs operator
-  - `kubectl apply -f tests/openebs/openebs-operator-v0.5.3.yaml`
-  - `kubectl apply -f tests/openebs/openebs-storage-classes-v0.5.3.yaml`
-- Install RBAC policies required for K8s job to execute
-  - NOTE: This is a one time activity
-  - `kubectl apply -f rbac.yaml`
-- Below commands runs the testcase **mysql_resiliency_with_3_reps** as a Kubernetes Job
-- `kubectl -n litmus create configmap omrwtr-application-launch --from-file=config=tests/openebs/mysql_resiliency_with_3_reps/application-launch.yaml`
-- `kubectl apply -f tests/openebs/mysql_resiliency_with_3_reps/test-the-feature.yaml`
+### Install provider operator(s)
+- NOTE: This is a one time activity
+- e.g. this installs openebs operator
+
+```
+$ kubectl apply -f tests/openebs/openebs-operator-v0.5.3.yaml
+$ kubectl apply -f tests/openebs/openebs-storage-classes-v0.5.3.yaml
+```
+
+### Install RBAC policies
+- These are the RBAC policies required for litmus container to run as a K8s job
+- NOTE: This is a one time activity
+
+```
+$ kubectl apply -f rbac.yaml
+```
+
+### Test these features
+
+#### deploy_minio
+```
+$ kubectl -n litmus create configmap odm-application-launch --from-file=config=tests/openebs/deploy_minio/application-launch.yaml
+$ kubectl apply -f tests/openebs/deploy_minio/test-the-feature.yaml
+```
+
+#### mysql_resiliency_with_3_reps
+```
+$ kubectl -n litmus create configmap omrwtr-application-launch --from-file=config=tests/openebs/mysql_resiliency_with_3_reps/application-launch.yaml
+$ kubectl apply -f tests/openebs/mysql_resiliency_with_3_reps/test-the-feature.yaml
+```
 
 ## Troubleshooting
 
-### Check the pod logs
-- `kubectl get pod -a`
-- `kubectl logs <recent_pod_that_errored_out>`
+### Check the job pod logs
+```
+$ kubectl get pod -a
+$ kubectl logs <recent_pod_that_errored_out>
+```
 
 ### Analyze via docker run
 - Try running the testcase via docker run to eliminate Dockerfile related issues
-  - Below command troubleshoots the testcase **mysql_resiliency_with_3_reps**
-  - `sudo docker run -w /go/src/github.com/AmitKumarDas/litmus/cmd/mysql_resiliency_with_3_reps -it openebs/litmus:latest godog e2e.feature`
+- e.g. below command may be used to troubleshoot the testcase **mysql_resiliency_with_3_reps**
+
+```
+$ sudo docker run -w /go/src/github.com/AmitKumarDas/litmus/cmd/mysql_resiliency_with_3_reps -it openebs/litmus:latest godog e2e.feature
+```
 
 ## Appendix
 - Scenario: An example of the system's behavior from one or more user's perspectives
