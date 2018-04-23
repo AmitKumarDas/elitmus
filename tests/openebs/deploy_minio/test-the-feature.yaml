@@ -50,6 +50,7 @@ data:
         labels: app=minio
       - kind: pvc
         name: odm-minio
+        alias: pvc
 ---
 apiVersion: v1
 kind: ConfigMap

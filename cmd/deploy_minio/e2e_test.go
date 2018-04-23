@@ -223,7 +223,7 @@ func (e2e *MinioLaunch) verifyPVIsDeployed() (err error) {
 	return
 }
 
-func (e2e *MinioLaunch) iDeleteMinioInstance() (err error) {
+func (e2e *MinioLaunch) iDeleteMinioInstanceAlongWithVolume() (err error) {
 	kubectl.New().Run([]string{"delete", "-f", string(ApplicationKF)})
 	return
 }
@@ -236,17 +236,6 @@ func (e2e *MinioLaunch) verifyMinioApplicationIsDeleted() (err error) {
 
 	// is application deleted
 	_, err = e2e.appVerifier.IsDeleted()
-	return
-}
-
-func (e2e *MinioLaunch) verifyPVCIsNotBound() (err error) {
-	if e2e.appVerifier == nil {
-		err = fmt.Errorf("nil application verifier: possible error '%s'", e2e.errors[ApplicationVerifyFileEI])
-		return
-	}
-
-	// is condition satisfied
-	_, err = e2e.appVerifier.IsCondition(PVCAlias, verify.PVCUnBoundCond)
 	return
 }
 
@@ -278,9 +267,8 @@ func FeatureContext(s *godog.Suite) {
 	s.Step(`^verify minio application is launched successfully on volume$`, e2e.verifyMinioApplicationIsLaunchedSuccessfullyOnVolume)
 	s.Step(`^verify PVC is bound$`, e2e.verifyPVCIsBound)
 	s.Step(`^verify PV is deployed$`, e2e.verifyPVIsDeployed)
-	s.Step(`^I delete minio instance$`, e2e.iDeleteMinioInstance)
+	s.Step(`^I delete minio instance along with volume$`, e2e.iDeleteMinioInstanceAlongWithVolume)
 	s.Step(`^verify minio application is deleted$`, e2e.verifyMinioApplicationIsDeleted)
-	s.Step(`^verify PVC is not bound$`, e2e.verifyPVCIsNotBound)
 	s.Step(`^verify PV is deleted$`, e2e.verifyPVIsDeleted)
 	s.Step(`^minio application is launched successfully on volume$`, e2e.minioApplicationIsLaunchedSuccessfullyOnVolume)
 }

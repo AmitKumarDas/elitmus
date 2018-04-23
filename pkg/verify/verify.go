@@ -427,17 +427,22 @@ func (v *KubeInstallVerify) isComponentDeleted(component Component) (yes bool, e
 			Run([]string{"get", component.Kind, component.Name})
 
 		if err == nil {
-			err = fmt.Errorf("component '%s' is not deleted: '%s'", component.Name, op)
+			err = fmt.Errorf("component '%#v' is not deleted: output '%s'", component, op)
 			return
 		}
 
 		if strings.Contains(err.Error(), "(NotFound)") {
 			// yes, it is deleted
 			yes = true
+			// We wanted to make sure that this component was deleted.
+			// Hence the get operation is expected to result in NotFound error
+			// from server. Now we can reset the err to nil to let the flow
+			// continue
+			err = nil
 			return
 		}
 
-		err = fmt.Errorf("unable to verify component '%s' delete status: '%s'", component.Name, op)
+		err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
 		return
 	}
 
@@ -451,12 +456,13 @@ func (v *KubeInstallVerify) isComponentDeleted(component Component) (yes bool, e
 		return
 	}
 
-	if strings.Contains(op, "No resources found") {
+	if len(strings.TrimSpace(op)) == 0 || strings.Contains(op, "No resources found") {
+		// yes, it is deleted
 		yes = true
 		return
 	}
 
-	err = fmt.Errorf("unable to verify component '%s' delete status: '%s'", component.Name, op)
+	err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
 	return
 }
 
