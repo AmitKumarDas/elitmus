@@ -82,8 +82,8 @@ spec:
       serviceAccountName: litmus
       containers:
       - name: odm-test-the-feature
-        image: openebs/litmus:latest
-        command: ["/bin/sh", "godog.sh", "./cmd/deploy_minio"]
+        image: openebs/litmus:ci
+        command: ["/bin/sh", "godog.sh", "./tests/minio/deploy_minio"]
         volumeMounts:
         - mountPath: /etc/e2e/operator-verify
           name: odm-operator-verify

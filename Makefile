@@ -52,3 +52,11 @@ compile:
 	@echo "--> Check compilation"
 	@echo "------------------"
 	@go test $(PACKAGES)
+
+.PHONY: image
+image:
+	@echo "------------------"
+	@echo "--> Build litmus image" 
+	@echo "------------------"
+	sudo docker build . -t openebs/litmus:ci
+	REPONAME="openebs" IMGNAME="litmus" IMGTAG="ci" ./hack/push
