@@ -48,15 +48,15 @@ $ kubectl apply -f tests/openebs/openebs-storage-classes-v0.5.3.yaml
 - NOTE: This is a one time activity
 
 ```bash
-$ kubectl apply -f rbac.yaml
+$ kubectl apply -f ./hack/rbac.yaml
 ```
 
 ### Test these features
 
 #### deploy_minio with openebs as litmus provider implementation
 ```bash
-$ kubectl -n litmus create configmap odm-application-launch --from-file=config=tests/openebs/deploy_minio/application-launch.yaml
-$ kubectl apply -f tests/openebs/deploy_minio/test-the-feature.yaml
+$ kubectl -n litmus create configmap odm-application-launch --from-file=config=tests/minio/deploy_minio/application-launch.yaml
+$ kubectl apply -f tests/minio/deploy_minio/test-the-feature.yaml
 
 # check the results
 $ kubectl -n litmus logs <jopb pod name>
