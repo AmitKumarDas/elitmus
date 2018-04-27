@@ -1,0 +1,92 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: test-high-avail-minio
+  namespace: litmus
+  labels:
+    name: test-high-avail-minio
+    test: ha-on-minio
+spec:
+  template:
+    spec:
+      serviceAccountName: litmus
+      containers:
+      - name: test-high-avail-minio
+        image: openebs/litmus:latest
+        command: ["/bin/sh", "godog.sh", "./tests/minio/high_availability"]
+        volumeMounts:
+        - mountPath: /etc/e2e/operator-verify
+          name: ha-minio-operator-verify
+        - mountPath: /etc/e2e/app-verify
+          name: ha-minio-app-verify
+        - mountPath: /etc/e2e/app-client-configs
+          name: ha-minio-app-client-configs
+        - mountPath: /etc/e2e/app-client-config-verify
+          name: ha-minio-app-client-config-verify
+        - mountPath: /etc/e2e/app-client-job-verify
+          name: ha-minio-app-client-job-verify
+        - mountPath: /etc/e2e/volume-verify
+          name: ha-minio-volume-verify
+        - mountPath: /etc/e2e/app-launch
+          name: ha-minio-app-launch
+        - mountPath: /etc/e2e/app-client-get
+          name: ha-minio-app-client-get
+        - mountPath: /etc/e2e/app-client-put
+          name: ha-minio-app-client-put
+      volumes:
+        - name: ha-minio-operator-verify
+          configMap: 
+            name: ha-minio-operator-verify
+            items:
+              - key: config
+                path: operator-verify.yaml
+        - name: ha-minio-app-verify
+          configMap: 
+            name: ha-minio-app-verify
+            items:
+              - key: config
+                path: app-verify.yaml
+        - name: ha-minio-app-client-configs
+          configMap: 
+            name: ha-minio-app-client-configs
+            items:
+              - key: config
+                path: app-client-configs.yaml
+        - name: ha-minio-app-client-config-verify
+          configMap: 
+            name: ha-minio-app-client-config-verify
+            items:
+              - key: config
+                path: app-client-config-verify.yaml
+        - name: ha-minio-volume-verify
+          configMap:
+            name: ha-minio-volume-verify
+            items:
+              - key: config
+                path: volume-verify.yaml
+        - name: ha-minio-app-client-job-verify
+          configMap:
+            name: ha-minio-app-client-job-verify
+            items:
+              - key: config
+                path: app-client-job-verify.yaml
+        - name: ha-minio-app-launch
+          configMap: 
+            name: ha-minio-app-launch
+            items:
+              - key: config
+                path: app-launch.yaml
+        - name: ha-minio-app-client-get
+          configMap: 
+            name: ha-minio-app-client-get-job
+            items:
+              - key: config
+                path: app-client-get-job.yaml
+        - name: ha-minio-app-client-put
+          configMap: 
+            name: ha-minio-app-client-put-job
+            items:
+              - key: config
+                path: app-client-put-job.yaml
+      restartPolicy: Never

@@ -25,7 +25,18 @@ import (
 
 // Executor acts as a contract for various execution based logic
 type Executor interface {
-	Output(args []string) (output string, err error)
+	Execute(args []string) (output string, err error)
+}
+
+// StdinExecutor acts as a contract for various stdin based execution logic
+type StdinExecutor interface {
+	StdinExecute(args []string, stdin []byte) (output string, err error)
+}
+
+// AllExecutor provides contracts for various execution approaches
+type AllExecutor interface {
+	Executor
+	StdinExecutor
 }
 
 // ShellExec is a shell based struct that implements Executor interface
@@ -41,8 +52,9 @@ func NewShellExec(binary string) *ShellExec {
 	}
 }
 
-// Output executes the shell command and returns the output or error
-func (e *ShellExec) Output(args []string) (output string, err error) {
+// Execute executes the shell command with the provided args and returns the
+// output or error
+func (e *ShellExec) Execute(args []string) (output string, err error) {
 	var out bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -59,5 +71,32 @@ func (e *ShellExec) Output(args []string) (output string, err error) {
 	// This removes the beginning & trailing single quotes from the output
 	// It has been observed that kubectl execution results in such single quotes
 	output = strings.Trim(out.String(), "'")
+	// Remove any spaces
+	output = strings.TrimSpace(output)
+	return
+}
+
+// StdinExecute executes the shell command with the provided args and stdin &
+// returns the output or error
+func (e *ShellExec) StdinExecute(args []string, stdin []byte) (output string, err error) {
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+
+	cmd := osexec.Command(e.binary, args...)
+	cmd.Stdin = bytes.NewBuffer(stdin)
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	if err != nil {
+		err = fmt.Errorf("failed to run cmd '%s': %s: %s", cmd.Args, fmt.Sprint(err), stderr.String())
+		return
+	}
+
+	// This removes the beginning & trailing single quotes from the output
+	// It has been observed that kubectl execution results in such single quotes
+	output = strings.Trim(out.String(), "'")
+	// Remove any spaces
+	output = strings.TrimSpace(output)
 	return
 }

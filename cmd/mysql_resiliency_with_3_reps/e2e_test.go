@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/AmitKumarDas/litmus/pkg/kubectl"
+	"github.com/AmitKumarDas/litmus/pkg/meta"
 	"github.com/AmitKumarDas/litmus/pkg/time"
 	"github.com/AmitKumarDas/litmus/pkg/verify"
 	"github.com/DATA-DOG/godog"
@@ -42,9 +43,9 @@ const (
 )
 
 const (
-	OperatorMF    verify.VerifyFile = "/etc/e2e/operator-verify/operator-verify.yaml"
-	ApplicationMF verify.VerifyFile = "/etc/e2e/application-verify/application-verify.yaml"
-	VolumeMF      verify.VerifyFile = "/etc/e2e/volume-verify/volume-verify.yaml"
+	OperatorMF    meta.InstallFile = "/etc/e2e/operator-verify/operator-verify.yaml"
+	ApplicationMF meta.InstallFile = "/etc/e2e/application-verify/application-verify.yaml"
+	VolumeMF      meta.InstallFile = "/etc/e2e/volume-verify/volume-verify.yaml"
 )
 
 const (
@@ -111,9 +112,9 @@ func (e2e *MySQLResiliencyWith3Reps) tearDown(f *gherkin.Feature) {
 }
 
 func (e2e *MySQLResiliencyWith3Reps) iHaveAKubernetesClusterWithVolumeOperatorInstalled() (err error) {
-	kconnVerifier := verify.NewKubeConnectionVerify()
+	kubeVerifier := verify.NewKubernetesVerify()
 	// checks if kubernetes cluster is available & is connected
-	_, err = kconnVerifier.IsConnected()
+	_, err = kubeVerifier.IsConnected()
 	if err != nil {
 		return
 	}

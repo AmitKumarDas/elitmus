@@ -1,0 +1,107 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-operator-verify
+  namespace: litmus
+  labels:
+    name: ha-minio-operator-verify
+    test: ha-on-minio
+data:
+  config: |-
+    components:
+      - kind: serviceaccount
+        name: openebs-maya-operator
+        namespace: default
+      - kind: clusterrole
+        name: openebs-maya-operator
+        namespace: default
+      - kind: clusterrolebinding
+        name: openebs-maya-operator
+        namespace: default
+      - kind: pod
+        labels: name=maya-apiserver
+        namespace: default
+      - kind: service
+        name: maya-apiserver-service
+        namespace: default
+      - kind: pod
+        labels: name=openebs-provisioner
+        namespace: default
+      - kind: sc
+        name: openebs-standalone
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-verify
+  namespace: litmus
+  labels:
+    name: ha-minio-app-verify
+    test: ha-on-minio
+data:
+  config: |-
+    components:
+      - kind: service
+        name: ha-minio
+        alias: app-service
+      - kind: deploy
+        name: ha-minio
+      - kind: pod
+        labels: app=ha-minio
+        alias: app-pod
+      - kind: pvc
+        name: ha-minio
+        alias: pvc
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-client-config-verify
+  namespace: litmus
+  labels:
+    name: ha-minio-app-client-config-verify
+    test: ha-on-minio
+data:
+  config: |-
+    components:
+      - kind: configmap
+        name: ha-minio-app-client-data
+      - kind: configmap
+        name: ha-minio-app-client-config
+      - kind: configmap
+        name: ha-minio-app-client-scripts
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-client-job-verify
+  namespace: litmus
+  labels:
+    name: ha-minio-app-client-job-verify
+    test: ha-on-minio
+data:
+  config: |-
+    components:
+      - kind: pod
+        labels: job-name=ha-minio-client-get
+        alias: get-job
+      - kind: pod
+        labels: job-name=ha-minio-client-put
+        alias: put-job
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-volume-verify
+  namespace: litmus
+  labels:
+    name: ha-minio-volume-verify
+    test: ha-on-minio
+data:
+  config: |-
+    components:
+      - kind: pod
+        labels: openebs/controller=jiva-controller
+      - kind: pod
+        labels: openebs/replica=jiva-replica

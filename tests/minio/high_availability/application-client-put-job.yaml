@@ -1,0 +1,44 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ha-minio-client-put
+  namespace: litmus
+  labels:
+    name: ha-minio-client-put
+    test: ha-on-minio
+spec:
+  template:
+    spec:
+      serviceAccountName: litmus
+      containers:
+      - name: ha-minio-client-put
+        image: minio/mc
+        command: ["/bin/sh", "/etc/e2e/app-client-put/put.sh"]
+        volumeMounts:
+        - mountPath: /etc/e2e/app-client-put
+          name: ha-minio-app-client-put
+        - mountPath: /etc/e2e/app-client-config
+          name: ha-minio-app-client-config
+        - mountPath: /etc/e2e/app-client-data
+          name: ha-minio-app-client-data
+      volumes:
+        - name: ha-minio-app-client-put
+          configMap: 
+            name: ha-minio-app-client-scripts
+            items:
+              - key: put
+                path: put.sh
+        - name: ha-minio-app-client-config
+          configMap: 
+            name: ha-minio-app-client-config
+            items:
+              - key: config
+                path: config.json
+        - name: ha-minio-app-client-data
+          configMap: 
+            name: ha-minio-app-client-data
+            items:
+              - key: config
+                path: data.txt
+      restartPolicy: Never

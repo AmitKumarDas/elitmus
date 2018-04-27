@@ -1,0 +1,81 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-client-data
+  namespace: litmus
+  labels:
+    name: ha-minio-app-client-data
+    test: ha-on-minio
+data:
+  config: |-
+    This data should remain forever.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-client-config
+  namespace: litmus
+  labels:
+    name: ha-minio-app-client-config
+    test: ha-on-minio
+data:
+  config: |-
+    {
+        "version": "8",
+        "hosts": {
+            "minio": {
+                "url": "http://{{.ip}}:9000/",
+                "accessKey": "minio",
+                "secretKey": "minio123",
+                "api": "S3v4"
+            }
+        }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ha-minio-app-client-scripts
+  namespace: litmus
+  labels:
+    name: ha-minio-app-client-scripts
+    test: ha-on-minio
+data:
+  put: |-
+    #!/usr/bin/env sh
+    set -o errexit
+    set -o nounset
+    
+    # display the mc config
+    cat /etc/e2e/app-client-config/config.json
+    
+    mkdir -p ~/.mc
+    cp /etc/e2e/app-client-config/config.json ~/.mc/config.json
+    
+    # make a bucket
+    mc mb minio/mybucket
+
+    # copy data to this bucket
+    mc cp /etc/e2e/app-client-data/data.txt minio/mybucket
+
+    # log the buckets
+    mc ls minio
+    mc ls minio/mybucket
+  get: |-
+    #!/usr/bin/env sh
+    set -o errexit
+    set -o nounset
+
+    # display the mc config
+    cat /etc/e2e/app-client-config/config.json
+
+    mkdir -p ~/.mc
+    cp /etc/e2e/app-client-config/config.json ~/.mc/config.json
+
+    # log the buckets
+    mc ls minio
+    mc ls minio/mybucket
+
+    # verification
+    mc cat minio/mybucket/data.txt | grep "$(cat /etc/e2e/app-client-data/data.txt)"

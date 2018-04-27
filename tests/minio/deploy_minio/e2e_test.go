@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/AmitKumarDas/litmus/pkg/kubectl"
+	"github.com/AmitKumarDas/litmus/pkg/meta"
 	"github.com/AmitKumarDas/litmus/pkg/time"
 	"github.com/AmitKumarDas/litmus/pkg/verify"
 	"github.com/DATA-DOG/godog"
@@ -42,15 +43,15 @@ const (
 )
 
 const (
-	// OperatorMF enables litmus to run checks & actions based on this volume
+	// OperatorIF enables litmus to run checks & actions based on this volume
 	// operator verify file
-	OperatorMF verify.VerifyFile = "/etc/e2e/operator-verify/operator-verify.yaml"
-	// ApplicationMF enables litmus to run checks & actions based on this application
+	OperatorIF meta.InstallFile = "/etc/e2e/operator-verify/operator-verify.yaml"
+	// ApplicationIF enables litmus to run checks & actions based on this application
 	// verify file
-	ApplicationMF verify.VerifyFile = "/etc/e2e/application-verify/application-verify.yaml"
-	// VolumeMF enables litmus to run checks & actions based on this volume verify
+	ApplicationIF meta.InstallFile = "/etc/e2e/application-verify/application-verify.yaml"
+	// VolumeIF enables litmus to run checks & actions based on this volume verify
 	// file
-	VolumeMF verify.VerifyFile = "/etc/e2e/volume-verify/volume-verify.yaml"
+	VolumeIF meta.InstallFile = "/etc/e2e/volume-verify/volume-verify.yaml"
 )
 
 const (
@@ -80,7 +81,7 @@ type MinioLaunch struct {
 }
 
 func (e2e *MinioLaunch) withOperatorVerifier(f *gherkin.Feature) {
-	o, err := verify.NewKubeInstallVerify(OperatorMF)
+	o, err := verify.NewKubeInstallVerify(OperatorIF)
 	if err != nil {
 		e2e.errors[OperatorVerifyFileEI] = err
 		return
@@ -89,7 +90,7 @@ func (e2e *MinioLaunch) withOperatorVerifier(f *gherkin.Feature) {
 }
 
 func (e2e *MinioLaunch) withApplicationVerifier(f *gherkin.Feature) {
-	a, err := verify.NewKubeInstallVerify(ApplicationMF)
+	a, err := verify.NewKubeInstallVerify(ApplicationIF)
 	if err != nil {
 		e2e.errors[ApplicationVerifyFileEI] = err
 		return
@@ -98,7 +99,7 @@ func (e2e *MinioLaunch) withApplicationVerifier(f *gherkin.Feature) {
 }
 
 func (e2e *MinioLaunch) withVolumeVerifier(f *gherkin.Feature) {
-	v, err := verify.NewKubeInstallVerify(VolumeMF)
+	v, err := verify.NewKubeInstallVerify(VolumeIF)
 	if err != nil {
 		e2e.errors[VolumeVerifyFileEI] = err
 		return
@@ -111,9 +112,9 @@ func (e2e *MinioLaunch) tearDown(f *gherkin.Feature) {
 }
 
 func (e2e *MinioLaunch) iHaveAKubernetesClusterWithVolumeOperatorInstalled() (err error) {
-	kconnVerifier := verify.NewKubeConnectionVerify()
+	kubeVerifier := verify.NewKubernetesVerify()
 	// checks if kubernetes cluster is available & is connected
-	_, err = kconnVerifier.IsConnected()
+	_, err = kubeVerifier.IsConnected()
 	if err != nil {
 		return
 	}

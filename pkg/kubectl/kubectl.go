@@ -28,6 +28,10 @@ import (
 // that can be applied by kubectl
 type KubectlFile string
 
+// TemplatedKubectlFile is the type to hold various yaml file paths that are
+// run through go template before be applied by kubectl
+type TemplatedKubectlFile string
+
 const (
 	// KubectlPath is the expected location where kubectl executable may be found
 	KubectlPath = "/usr/local/bin/kubectl"
@@ -62,6 +66,13 @@ type KubeRunner interface {
 	Run(args []string) (output string, err error)
 }
 
+// KubeStdinRunner interface provides the contract i.e. method signature to
+// invoke commands at kubernetes cluster
+type KubeStdinRunner interface {
+	// StdinRun executes the kubectl command
+	StdinRun(args []string, stdin []byte) (output string, err error)
+}
+
 // Kubectl holds the properties required to execute any kubectl command.
 // Kubectl is an implementation of following interfaces:
 // 1. KubeRunner
@@ -75,7 +86,7 @@ type Kubectl struct {
 	// args are provided to kubectl command during its run
 	args []string
 	// executor does actual kubectl execution
-	executor exec.Executor
+	executor exec.AllExecutor
 }
 
 // GetKubectlPath gets the location where kubectl executable is
@@ -130,7 +141,15 @@ func (k *Kubectl) Args(args []string) *Kubectl {
 func (k *Kubectl) Run(args []string) (output string, err error) {
 	k.args = kubectlArgs(args, k.namespace, k.context, k.labels)
 
-	output, err = k.executor.Output(k.args)
+	output, err = k.executor.Execute(k.args)
+	return
+}
+
+// StdinRun will execute the kubectl command & provide output or error
+func (k *Kubectl) StdinRun(args []string, stdin []byte) (output string, err error) {
+	k.args = kubectlArgs(args, k.namespace, k.context, k.labels)
+
+	output, err = k.executor.StdinExecute(k.args, stdin)
 	return
 }
 
@@ -139,6 +158,30 @@ func (k *Kubectl) Run(args []string) (output string, err error) {
 func IsPod(kind string) (yes bool) {
 	switch kind {
 	case "po", "pod", "pods", "deploy", "deployment", "deployments", "job", "jobs", "sts", "statefulset", "statefulsets", "ds", "daemonset", "daemonsets":
+		yes = true
+	default:
+		yes = false
+	}
+
+	return
+}
+
+// IsJob flags if the provided kind is a kubernetes job
+func IsJob(kind string) (yes bool) {
+	switch kind {
+	case "job", "jobs":
+		yes = true
+	default:
+		yes = false
+	}
+
+	return
+}
+
+// IsService flags if the provided kind is a kubernetes service
+func IsService(kind string) (yes bool) {
+	switch kind {
+	case "svc", "service", "services":
 		yes = true
 	default:
 		yes = false
@@ -167,7 +210,7 @@ func ArePodsRunning(k KubeRunner) (yes bool, err error) {
 	}
 
 	// split the output by space
-	isReadyArr := strings.Split(isReady, " ")
+	isReadyArr := strings.Split(strings.TrimSpace(isReady), " ")
 
 	if contains(isReadyArr, "false") {
 		err = fmt.Errorf("pod(s) are not running: '%#v' '%#v'", k, isReadyArr)
@@ -209,7 +252,7 @@ func IsPodRunning(k KubeRunner, name string) (yes bool, err error) {
 	}
 
 	// split the output by space
-	isReadyArr := strings.Split(isReady, " ")
+	isReadyArr := strings.Split(strings.TrimSpace(isReady), " ")
 
 	if contains(isReadyArr, "false") {
 		err = fmt.Errorf("pod '%s' is not running: '%#v'", name, isReadyArr)
@@ -235,20 +278,32 @@ func GetPodNodes(k KubeRunner) (nodes []string, err error) {
 	}
 
 	// split the output by space
-	nodes = strings.Split(n, " ")
+	nodes = strings.Split(strings.TrimSpace(n), " ")
 	return
 }
 
-// GetPods fetches the pods based on the provided labels
-func GetPods(k KubeRunner) (pods []string, err error) {
+// GetAllPodNames fetches the names of all the pods based on the labels & namespace set
+// against the KubeRunner
+func GetAllPodNames(k KubeRunner) (pods []string, err error) {
 	p, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].metadata.name}'"})
 	if err != nil {
 		return
 	}
 
 	// split the output by space
-	pods = strings.Split(p, " ")
+	pods = strings.Split(strings.TrimSpace(p), " ")
+	return
+}
 
+// GetAllNodeNames fetches the names of all the nodes registered to the cluster
+func GetAllNodeNames(k KubeRunner) (nodes []string, err error) {
+	op, err := k.Run([]string{"get", "nodes", "-o", "jsonpath='{.items[*].metadata.name}'"})
+	if err != nil {
+		return
+	}
+
+	// split the output by space
+	nodes = strings.Split(strings.TrimSpace(op), " ")
 	return
 }
 
@@ -266,13 +321,13 @@ func GetRunningPods(k KubeRunner) (pods []string, err error) {
 	}
 
 	// split the output by the splitter used in above command
-	firstSplit := strings.Split(o, "::::")
+	firstSplit := strings.Split(strings.TrimSpace(o), "::::")
 	for _, fs := range firstSplit {
 		if len(fs) == 0 {
 			continue
 		}
 
-		secondSplit := strings.Split(fs, "::")
+		secondSplit := strings.Split(strings.TrimSpace(fs), "::")
 		// ignore if pod is not running
 		if strings.Contains(secondSplit[1], "false") {
 			continue
@@ -296,19 +351,19 @@ func GetRunningPods(k KubeRunner) (pods []string, err error) {
 // kube-addon-manager-amit-thinkpad-l470::true::::kube-dns-54cccfbdf8-q7v2c::false false true::::kubernetes-dashboard-77d8b98585-cwbjq::false::::storage-provisioner::true::::tiller-deploy-5b48764ff7-g9qz7::true::::
 func GetOldestRunningPod(k KubeRunner) (pod string, err error) {
 	// fetch pods sorted by creation timestamp
-	o, err := k.Run([]string{"get", "pods", "-o", "--sort-by=.metadata.creationTimestamp", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"})
+	o, err := k.Run([]string{"get", "pods", "--sort-by=.metadata.creationTimestamp", "-o", "jsonpath='{range .items[*]}{@.metadata.name}::{@.status.containerStatuses[*].ready}::::{end}'"})
 	if err != nil {
 		return
 	}
 
 	// split the output by the splitter used in above command
-	firstSplit := strings.Split(o, "::::")
+	firstSplit := strings.Split(strings.TrimSpace(o), "::::")
 	for _, fs := range firstSplit {
 		if len(fs) == 0 {
 			continue
 		}
 
-		secondSplit := strings.Split(fs, "::")
+		secondSplit := strings.Split(strings.TrimSpace(fs), "::")
 		// ignore if pod is not running
 		if strings.Contains(secondSplit[1], "false") {
 			continue
@@ -327,6 +382,85 @@ func GetOldestRunningPod(k KubeRunner) (pod string, err error) {
 // DeletePod deletes the specified pod
 func DeletePod(k KubeRunner, name string) (err error) {
 	_, err = k.Run([]string{"delete", "pods", name})
+	return
+}
+
+// CordonNodeWithPod cordons the node that host the specified pod
+func CordonNodeWithPod(k KubeRunner, pod string) (err error) {
+	op, err := k.Run([]string{"get", "pods", pod, "-o", "jsonpath='{.spec.nodeName}'"})
+	if err != nil {
+		return
+	}
+
+	node := strings.TrimSpace(op)
+	if len(node) == 0 {
+		err = fmt.Errorf("unable to cordon node: node not found for pod '%s'", pod)
+		return
+	}
+
+	_, err = k.Run([]string{"cordon", node})
+	return
+}
+
+// GetServiceIP gets the cluster IP address of the service
+func GetServiceIP(k KubeRunner, service string) (ip string, err error) {
+	return k.Run([]string{"get", "services", service, "-o", "jsonpath='{.spec.clusterIP}'"})
+}
+
+// IsJobCompleted flags if the job is completed
+func IsJobCompleted(k KubeRunner, name string) (yes bool, err error) {
+	op, _ := k.Run([]string{"get", "jobs", name, "-o", "jsonpath='{.status.succeeded}'"})
+	if op == "1" {
+		yes = true
+	} else {
+		err = fmt.Errorf("job is not completed: command '%#v'", k)
+	}
+
+	return
+}
+
+// AreJobPodsCompleted flags if the job's pods are completed
+//
+// NOTE: This expects the KubeRunner with appropriate label selector
+func AreJobPodsCompleted(k KubeRunner) (yes bool, err error) {
+	op, err := k.Run([]string{"get", "pods", "-o", "jsonpath='{.items[*].status.phase}'"})
+	if err != nil {
+		return
+	}
+
+	// split the output by space
+	states := strings.Split(strings.ToLower(op), " ")
+	for _, state := range states {
+		if state != "succeeded" {
+			err = fmt.Errorf("job pod is not completed '%#v': output '%#v'", k, states)
+			return
+		}
+	}
+
+	yes = true
+	return
+}
+
+// UnCordonAllNodes uncordons all the nodes in the cluster
+func UnCordonAllNodes(ignoreError bool) (err error) {
+	nodes, err := GetAllNodeNames(New())
+	if err != nil {
+		return
+	}
+
+	for _, n := range nodes {
+		_, err = New().Run([]string{"uncordon", n})
+		if !ignoreError && err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+// ApplyStdIn does a kubectl apply from stdin
+func ApplyStdIn(stdin []byte) (err error) {
+	_, err = New().StdinRun([]string{"apply", "-f", "-"}, stdin)
 	return
 }
 

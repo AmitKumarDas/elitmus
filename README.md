@@ -53,22 +53,18 @@ $ kubectl apply -f ./hack/rbac.yaml
 
 ### Test these features
 
-#### deploy_minio with openebs as litmus provider implementation
+#### test high availability of minio with openebs as litmus provider implementation
 ```bash
-$ kubectl -n litmus create configmap odm-application-launch --from-file=config=tests/minio/deploy_minio/application-launch.yaml
-$ kubectl apply -f tests/minio/deploy_minio/test-the-feature.yaml
+# ensure a multi-node kubernetes cluster
+# ensure openebs operator is deployed
+sh tests/minio/high_availability/run.sh
 
 # check the results
-$ kubectl -n litmus logs <jopb pod name>
-```
+$ kubectl -n litmus pods -a --selector=test=ha-on-minio
+$ kubectl -n litmus logs <job pod name>
 
-#### mysql_resiliency_with_3_reps with openebs as litmus provider implementation
-```bash
-$ kubectl -n litmus create configmap omrwtr-application-launch --from-file=config=tests/openebs/mysql_resiliency_with_3_reps/application-launch.yaml
-$ kubectl apply -f tests/openebs/mysql_resiliency_with_3_reps/test-the-feature.yaml
-
-# check the results
-$ kubectl -n litmus logs <jopb pod name>
+# tear down
+sh tests/minio/high_availability/teardown.sh
 ```
 
 ## Troubleshooting

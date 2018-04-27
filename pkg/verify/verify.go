@@ -18,18 +18,11 @@ package verify
 
 import (
 	"fmt"
-	"io/ioutil"
 	"strings"
 
 	"github.com/AmitKumarDas/litmus/pkg/kubectl"
-	"github.com/ghodss/yaml"
+	"github.com/AmitKumarDas/litmus/pkg/meta"
 )
-
-// VerifyFile type defines a yaml file path that represents an installation
-// and is used for various verification purposes
-//
-// A verify file is a yaml version of Installation struct
-type VerifyFile string
 
 // Condition type defines a condition that can be applied against a component
 // or a set of components
@@ -44,6 +37,11 @@ const (
 	PVCBoundCond Condition = "is-pvc-bound"
 	// PVCUnBoundCond is a condition to check if PVC is unbound
 	PVCUnBoundCond Condition = "is-pvc-unbound"
+	// MultiNodeClusterCond is a condition to check if kubernetes cluster
+	// has more than one node
+	MultiNodeClusterCond Condition = "is-multi-node-k8s-cluster"
+	// JobCompletedCond is a condition to check if job is completed
+	JobCompletedCond Condition = "is-job-completed"
 )
 
 // Action type defines a action that can be applied against a component
@@ -55,6 +53,9 @@ const (
 	DeleteAnyPodAction Action = "delete-any-pod"
 	// DeleteOldestPodAction is an action to delete the oldest pod
 	DeleteOldestPodAction Action = "delete-oldest-pod"
+	// CordonNodeWithOldestPodAction is an action to cordon a node that hosts
+	// the oldest pod
+	CordonNodeWithOldestPodAction Action = "cordon-node-with-oldest-pod"
 )
 
 // DeleteVerifier provides contract(s) i.e. method signature(s) to evaluate
@@ -127,92 +128,17 @@ type AllVerifier interface {
 	ActionVerifier
 }
 
-// Installation represents a set of components that represent an installation
-// e.g. an operator represented by its CRDs, RBACs and Deployments forms an
-// installation
-//
-// NOTE:
-//  Installation struct is accepted as a yaml file that is meant to be verified.
-// In addition this file allows the testing logic to take appropriate actions
-// as directed in the .feature file.
-type Installation struct {
-	// VerifyID is an identifier that is used to tie together related installations
-	// meant to be verified
-	VerifyID string `json:"verifyID"`
-	// Version of this installation, operator etc
-	Version string `json:"version"`
-	// Components of this installation
-	Components []Component `json:"components"`
-}
-
-// Component is the information about a particular component
-// e.g. a Kubernetes Deployment, or a Kubernetes Pod, etc can be
-// a component in the overall installation
-type Component struct {
-	// Name of the component
-	Name string `json:"name"`
-	// Namespace of the component
-	Namespace string `json:"namespace"`
-	// Kind name of the component
-	// e.g. pods, deployments, services, etc
-	Kind string `json:"kind"`
-	// APIVersion of the component
-	APIVersion string `json:"apiVersion"`
-	// Labels of the component that is used for filtering the components
-	//
-	// Following are some valid sample values for labels:
-	//
-	//    labels: name=app
-	//    labels: name=app,env=prod
-	Labels string `json:"labels"`
-	// Alias provides a user understood description used for filtering the
-	// components. This is a single word setting.
-	//
-	// NOTE:
-	//  Ensure unique alias values in an installation
-	//
-	// DETAILS:
-	//  This is the text which is typically understood by the end user. This text
-	// which will be set in the installation file against a particular component.
-	// Verification logic will filter the component based on this alias & run
-	// various checks &/or actions
-	Alias string `json:"alias"`
-}
-
-// unmarshal takes the raw yaml data and unmarshals it into Installation
-func unmarshal(data []byte) (installation *Installation, err error) {
-	installation = &Installation{}
-
-	err = yaml.Unmarshal(data, installation)
-	return
-}
-
-// load converts a verify file into an instance of *Installation
-func load(file VerifyFile) (installation *Installation, err error) {
-	if len(file) == 0 {
-		err = fmt.Errorf("failed to load: verify file is not provided")
-		return
-	}
-
-	d, err := ioutil.ReadFile(string(file))
-	if err != nil {
-		return
-	}
-
-	return unmarshal(d)
-}
-
 // KubeInstallVerify provides methods that handles verification related logic of
 // an installation within kubernetes e.g. application, deployment, operator, etc
 type KubeInstallVerify struct {
 	// installation is the set of components that determine the install
-	installation *Installation
+	installation *meta.Installation
 }
 
 // NewKubeInstallVerify provides a new instance of NewKubeInstallVerify based on
-// the provided kubernetes runner & verify file
-func NewKubeInstallVerify(file VerifyFile) (*KubeInstallVerify, error) {
-	i, err := load(file)
+// the provided install file
+func NewKubeInstallVerify(file meta.InstallFile) (*KubeInstallVerify, error) {
+	i, err := meta.Load(file)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +156,7 @@ func (v *KubeInstallVerify) IsDeployed() (yes bool, err error) {
 	}
 
 	for _, component := range v.installation.Components {
-		yes, err = v.isComponentDeployed(component)
+		yes, err = isComponentDeployed(component)
 		if err != nil {
 			break
 		}
@@ -247,7 +173,7 @@ func (v *KubeInstallVerify) IsDeleted() (yes bool, err error) {
 	}
 
 	for _, component := range v.installation.Components {
-		yes, err = v.isComponentDeleted(component)
+		yes, err = isComponentDeleted(component)
 		if err != nil {
 			break
 		}
@@ -268,7 +194,7 @@ func (v *KubeInstallVerify) IsRunning() (yes bool, err error) {
 			continue
 		}
 
-		yes, err = v.isPodComponentRunning(component)
+		yes, err = isPodComponentRunning(component)
 		if err != nil {
 			break
 		}
@@ -288,6 +214,8 @@ func (v *KubeInstallVerify) IsCondition(alias string, condition Condition) (yes 
 		return v.isPVCBound(alias)
 	case PVCUnBoundCond:
 		return v.isPVCUnBound(alias)
+	case JobCompletedCond:
+		return v.isJobCompleted(alias)
 	default:
 		err = fmt.Errorf("condition '%s' is not supported", condition)
 	}
@@ -301,6 +229,8 @@ func (v *KubeInstallVerify) IsAction(alias string, action Action) (yes bool, err
 		return v.isDeleteAnyRunningPod(alias)
 	case DeleteOldestPodAction:
 		return v.isDeleteOldestRunningPod(alias)
+	case CordonNodeWithOldestPodAction:
+		return v.isCordonNodeWithOldestPod(alias)
 	default:
 		err = fmt.Errorf("action '%s' is not supported", action)
 	}
@@ -311,7 +241,7 @@ func (v *KubeInstallVerify) IsAction(alias string, action Action) (yes bool, err
 func (v *KubeInstallVerify) isDeleteAnyRunningPod(alias string) (yes bool, err error) {
 	var pods = []string{}
 
-	c, err := v.getMatchingPodComponent(alias)
+	c, err := v.installation.GetMatchingPodComponent(alias)
 	if err != nil {
 		return
 	}
@@ -347,14 +277,14 @@ func (v *KubeInstallVerify) isDeleteAnyRunningPod(alias string) (yes bool, err e
 func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, err error) {
 	var pod string
 
-	c, err := v.getMatchingPodComponent(alias)
+	c, err := v.installation.GetMatchingPodComponent(alias)
 	if err != nil {
 		return
 	}
 
 	// check for presence of labels
 	if len(strings.TrimSpace(c.Labels)) == 0 {
-		err = fmt.Errorf("unable to fetch component '%s' '%s': component labels are missing '%s'", c.Kind, alias)
+		err = fmt.Errorf("failed to delete oldest running pod: component labels are missing: component '%#v': alias '%s'", c, alias)
 		return
 	}
 
@@ -366,7 +296,7 @@ func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, er
 	}
 
 	if len(pod) == 0 {
-		err = fmt.Errorf("failed to delete oldest running pod: pod with alias '%s' and running state is not found", alias)
+		err = fmt.Errorf("failed to delete oldest running pod: pod with running state is not found: alias '%s'", alias)
 		return
 	}
 
@@ -381,151 +311,43 @@ func (v *KubeInstallVerify) isDeleteOldestRunningPod(alias string) (yes bool, er
 	return
 }
 
-func (v *KubeInstallVerify) getMatchingPodComponent(alias string) (comp Component, err error) {
-	var filtered = []Component{}
+// isCordonNodeWithOldestPod cordons the node that hosts the oldest pod. The pod
+// is filtered based on the provided alias.
+func (v *KubeInstallVerify) isCordonNodeWithOldestPod(alias string) (yes bool, err error) {
+	var pod string
 
-	// filter the components that are pods & match with the provided alias
-	for _, c := range v.installation.Components {
-		if c.Alias == alias && kubectl.IsPod(c.Kind) {
-			filtered = append(filtered, c)
-		}
-	}
-
-	if len(filtered) == 0 {
-		err = fmt.Errorf("component not found for alias '%s'", alias)
-		return
-	}
-
-	// there should be only one component that matches the alias
-	if len(filtered) > 1 {
-		err = fmt.Errorf("multiple components found for alias '%s': alias should be unique in an install", alias)
-		return
-	}
-
-	return filtered[0], nil
-}
-
-// isComponentDeleted flags if a particular component is deleted
-func (v *KubeInstallVerify) isComponentDeleted(component Component) (yes bool, err error) {
-	var op string
-
-	if len(strings.TrimSpace(component.Kind)) == 0 {
-		err = fmt.Errorf("unable to verify component delete status: component kind is missing")
-		return
-	}
-
-	// either name or labels is required
-	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
-		err = fmt.Errorf("unable to verify component delete status: either component name or its labels is required")
-		return
-	}
-
-	// check via name
-	if len(strings.TrimSpace(component.Name)) != 0 {
-		op, err = kubectl.New().
-			Namespace(component.Namespace).
-			Run([]string{"get", component.Kind, component.Name})
-
-		if err == nil {
-			err = fmt.Errorf("component '%#v' is not deleted: output '%s'", component, op)
-			return
-		}
-
-		if strings.Contains(err.Error(), "(NotFound)") {
-			// yes, it is deleted
-			yes = true
-			// We wanted to make sure that this component was deleted.
-			// Hence the get operation is expected to result in NotFound error
-			// from server. Now we can reset the err to nil to let the flow
-			// continue
-			err = nil
-			return
-		}
-
-		err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
-		return
-	}
-
-	// or check via labels
-	op, err = kubectl.New().
-		Namespace(component.Namespace).
-		Labels(component.Labels).
-		Run([]string{"get", component.Kind})
-
+	c, err := v.installation.GetMatchingPodComponent(alias)
 	if err != nil {
 		return
 	}
 
-	if len(strings.TrimSpace(op)) == 0 || strings.Contains(op, "No resources found") {
-		// yes, it is deleted
-		yes = true
+	// check for presence of labels
+	if len(strings.TrimSpace(c.Labels)) == 0 {
+		err = fmt.Errorf("unable to cordon node with oldest pod: component labels are missing: component '%#v': alias '%s'", c, alias)
 		return
 	}
 
-	err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
+	// fetch oldest running pod
+	k := kubectl.New().Namespace(c.Namespace).Labels(c.Labels)
+	pod, err = kubectl.GetOldestRunningPod(k)
+	if err != nil {
+		return
+	}
+
+	if len(pod) == 0 {
+		err = fmt.Errorf("unable to cordon node with oldest pod: pod with running state is not found: alias '%s'", alias)
+		return
+	}
+
+	// cordon the node that hosts this oldest pod
+	k = kubectl.New().Namespace(c.Namespace)
+	err = kubectl.CordonNodeWithPod(k, pod)
+	if err != nil {
+		return
+	}
+
+	yes = true
 	return
-}
-
-// isComponentDeployed flags if a particular component is deployed
-func (v *KubeInstallVerify) isComponentDeployed(component Component) (yes bool, err error) {
-	var op string
-
-	if len(strings.TrimSpace(component.Kind)) == 0 {
-		err = fmt.Errorf("unable to verify component deploy status: component kind is missing")
-		return
-	}
-
-	// either name or labels is required
-	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
-		err = fmt.Errorf("unable to verify component deploy status: either component name or its labels is required")
-		return
-	}
-
-	// check via name
-	if len(strings.TrimSpace(component.Name)) != 0 {
-		op, err = kubectl.New().
-			Namespace(component.Namespace).
-			Run([]string{"get", component.Kind, component.Name, "-o", "jsonpath='{.metadata.name}'"})
-
-		if err == nil && len(strings.TrimSpace(op)) != 0 {
-			// yes, it is deployed
-			yes = true
-		}
-		return
-	}
-
-	// or check via labels
-	op, err = kubectl.New().
-		Namespace(component.Namespace).
-		Labels(component.Labels).
-		Run([]string{"get", component.Kind, "-o", "jsonpath='{.items[*].metadata.name}'"})
-
-	if err == nil && len(strings.TrimSpace(op)) != 0 {
-		// yes, it is deployed
-		yes = true
-	}
-	return
-}
-
-// isPodComponentRunning flags if a particular component is running
-func (v *KubeInstallVerify) isPodComponentRunning(component Component) (yes bool, err error) {
-	// either name or labels is required
-	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
-		err = fmt.Errorf("unable to verify pod component running status: either name or its labels is required")
-		return
-	}
-
-	// check via name
-	if len(strings.TrimSpace(component.Name)) != 0 {
-		k := kubectl.New().Namespace(component.Namespace)
-		return kubectl.IsPodRunning(k, component.Name)
-	}
-
-	// or check via labels
-	k := kubectl.New().
-		Namespace(component.Namespace).
-		Labels(component.Labels)
-	return kubectl.ArePodsRunning(k)
 }
 
 // hasComponentThreeReplicas flags if a component has three replicas
@@ -534,42 +356,15 @@ func (v *KubeInstallVerify) hasComponentThreeReplicas(alias string) (yes bool, e
 	return
 }
 
-// getPVCVolume fetches the PVC's volume
-func (v *KubeInstallVerify) getPVCVolume(alias string) (op string, err error) {
-	var filtered = []Component{}
-
-	// filter the components based on the provided alias
-	for _, c := range v.installation.Components {
-		if c.Alias == alias {
-			filtered = append(filtered, c)
-		}
-	}
-
-	if len(filtered) == 0 {
-		err = fmt.Errorf("unable to check pvc bound status: no component with alias '%s'", alias)
+// isJobCompleted flags if a job is completed
+func (v *KubeInstallVerify) isJobCompleted(alias string) (yes bool, err error) {
+	c, err := v.installation.GetMatchingPodComponent(alias)
+	if err != nil {
 		return
 	}
 
-	if len(filtered) > 1 {
-		err = fmt.Errorf("unable to check pvc bound status: more than one components found with alias '%s'", alias)
-		return
-	}
-
-	if len(filtered[0].Name) == 0 {
-		err = fmt.Errorf("unable to check pvc bound status: component name is required: '%#v'", filtered[0])
-		return
-	}
-
-	if filtered[0].Kind != "pvc" {
-		err = fmt.Errorf("unable to check pvc bound status: component is not a pvc resource: '%#v'", filtered[0])
-		return
-	}
-
-	op, err = kubectl.New().
-		Namespace(filtered[0].Namespace).
-		Run([]string{"get", "pvc", filtered[0].Name, "-o", "jsonpath='{.spec.volumeName}'"})
-
-	return
+	k := kubectl.New().Namespace(c.Namespace).Labels(c.Labels)
+	return kubectl.AreJobPodsCompleted(k)
 }
 
 // isPVCBound flags if a PVC component is bound
@@ -610,7 +405,7 @@ func (v *KubeInstallVerify) isPVCUnBound(alias string) (yes bool, err error) {
 
 // isEachComponentOnUniqueNode flags if each component is placed on unique node
 func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, error) {
-	var filtered = []Component{}
+	var filtered = []meta.Component{}
 	var nodes = []string{}
 
 	// filter the components based on the provided alias
@@ -641,6 +436,10 @@ func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, err
 		nodes = append(nodes, n...)
 	}
 
+	if len(nodes) == 0 {
+		return false, fmt.Errorf("unable to determine component's unique node: nodes '%#v'", nodes)
+	}
+
 	// check if condition is satisfied i.e. no duplicate nodes
 	exists := map[string]string{}
 	for _, n := range nodes {
@@ -653,20 +452,206 @@ func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, err
 	return true, nil
 }
 
-// KubeConnectionVerify provides methods that verifies connection to a kubernetes
-// environment
-type KubeConnectionVerify struct{}
+// getPVCVolume fetches the PVC's volume
+func (v *KubeInstallVerify) getPVCVolume(alias string) (op string, err error) {
+	var filtered = []meta.Component{}
 
-// NewKubeConnectionVerify provides a new instance of KubeConnectionVerify
-func NewKubeConnectionVerify() *KubeConnectionVerify {
-	return &KubeConnectionVerify{}
+	// filter the components based on the provided alias
+	for _, c := range v.installation.Components {
+		if c.Alias == alias {
+			filtered = append(filtered, c)
+		}
+	}
+
+	if len(filtered) == 0 {
+		err = fmt.Errorf("unable to check pvc bound status: no component with alias '%s'", alias)
+		return
+	}
+
+	if len(filtered) > 1 {
+		err = fmt.Errorf("unable to check pvc bound status: more than one components found with alias '%s'", alias)
+		return
+	}
+
+	if len(filtered[0].Name) == 0 {
+		err = fmt.Errorf("unable to check pvc bound status: component name is required: '%#v'", filtered[0])
+		return
+	}
+
+	if filtered[0].Kind != "pvc" {
+		err = fmt.Errorf("unable to check pvc bound status: component is not a pvc resource: '%#v'", filtered[0])
+		return
+	}
+
+	op, err = kubectl.New().
+		Namespace(filtered[0].Namespace).
+		Run([]string{"get", "pvc", filtered[0].Name, "-o", "jsonpath='{.spec.volumeName}'"})
+
+	return
+}
+
+// isPodComponentRunning flags if a particular component is running
+func isPodComponentRunning(component meta.Component) (yes bool, err error) {
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify pod component running status: either name or its labels is required: component '%#v'", component)
+		return
+	}
+
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		k := kubectl.New().Namespace(component.Namespace)
+		return kubectl.IsPodRunning(k, component.Name)
+	}
+
+	// or check via labels
+	k := kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels)
+	return kubectl.ArePodsRunning(k)
+}
+
+// isComponentDeployed flags if a particular component is deployed
+func isComponentDeployed(component meta.Component) (yes bool, err error) {
+	var op string
+
+	if len(strings.TrimSpace(component.Kind)) == 0 {
+		err = fmt.Errorf("unable to verify component deploy status: component kind is missing: component '%#v'", component)
+		return
+	}
+
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify component deploy status: either component name or its labels is required: component '%#v'", component)
+		return
+	}
+
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		op, err = kubectl.New().
+			Namespace(component.Namespace).
+			Run([]string{"get", component.Kind, component.Name, "-o", "jsonpath='{.metadata.name}'"})
+
+		if err == nil && len(strings.TrimSpace(op)) != 0 {
+			// yes, it is deployed
+			yes = true
+		}
+		return
+	}
+
+	// or check via labels
+	op, err = kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels).
+		Run([]string{"get", component.Kind, "-o", "jsonpath='{.items[*].metadata.name}'"})
+
+	if err == nil && len(strings.TrimSpace(op)) != 0 {
+		// yes, it is deployed
+		yes = true
+	}
+	return
+}
+
+// isComponentDeleted flags if a particular component is deleted
+func isComponentDeleted(component meta.Component) (yes bool, err error) {
+	var op string
+
+	if len(strings.TrimSpace(component.Kind)) == 0 {
+		err = fmt.Errorf("unable to verify component delete status: component kind is missing: component '%#v'", component)
+		return
+	}
+
+	// either name or labels is required
+	if len(strings.TrimSpace(component.Name)) == 0 && len(strings.TrimSpace(component.Labels)) == 0 {
+		err = fmt.Errorf("unable to verify component delete status: either component name or its labels is required: component '%#v'", component)
+		return
+	}
+
+	// check via name
+	if len(strings.TrimSpace(component.Name)) != 0 {
+		op, err = kubectl.New().
+			Namespace(component.Namespace).
+			Run([]string{"get", component.Kind, component.Name})
+
+		if err == nil {
+			err = fmt.Errorf("component is not deleted: component '%#v': output '%s'", component, op)
+			return
+		}
+
+		if strings.Contains(err.Error(), "(NotFound)") {
+			// yes, it is deleted
+			yes = true
+			// We wanted to make sure that this component was deleted.
+			// Hence the get operation is expected to result in NotFound error
+			// from server. Now we can reset the err to nil to let the flow
+			// continue
+			err = nil
+			return
+		}
+
+		err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
+		return
+	}
+
+	// or check via labels
+	op, err = kubectl.New().
+		Namespace(component.Namespace).
+		Labels(component.Labels).
+		Run([]string{"get", component.Kind})
+
+	if err != nil {
+		return
+	}
+
+	if len(strings.TrimSpace(op)) == 0 || strings.Contains(op, "No resources found") {
+		// yes, it is deleted
+		yes = true
+		return
+	}
+
+	err = fmt.Errorf("unable to verify delete status of component '%#v': output '%s'", component, op)
+	return
+}
+
+// KubernetesVerify provides methods that provides methods applicable to
+// kubernetes cluster
+type KubernetesVerify struct{}
+
+// NewKubeConnectionVerify provides a new instance of KubernetesVerify
+func NewKubernetesVerify() *KubernetesVerify {
+	return &KubernetesVerify{}
 }
 
 // IsConnected verifies if kubectl can connect to the target Kubernetes cluster
-func (k *KubeConnectionVerify) IsConnected() (yes bool, err error) {
+func (k *KubernetesVerify) IsConnected() (yes bool, err error) {
 	_, err = kubectl.New().Run([]string{"get", "pods"})
 	if err == nil {
 		yes = true
+	}
+	return
+}
+
+// IsCondition evaluates if specific condition is satisfied or not
+func (v *KubernetesVerify) IsCondition(alias string, condition Condition) (yes bool, err error) {
+	switch condition {
+	case MultiNodeClusterCond:
+		return v.isMultiNodeCluster(alias)
+	default:
+		err = fmt.Errorf("condition '%s' is not supported by kubernetes verify", condition)
+	}
+	return
+}
+
+func (v *KubernetesVerify) isMultiNodeCluster(alias string) (yes bool, err error) {
+	nodes, err := kubectl.GetAllNodeNames(kubectl.New())
+	if err != nil {
+		return
+	}
+
+	if len(nodes) > 1 {
+		yes = true
+	} else {
+		err = fmt.Errorf("not a multi-node cluster: nodes '%#v'", nodes)
 	}
 	return
 }
