@@ -42,6 +42,8 @@ type Fetcher interface {
 type KubeResourceFetch struct {
 	// installation is the set of components that is installed on kubernetes
 	installation *meta.Installation
+	// kubectlFactory instance enables fetching new instance of KubeAllRunner
+	kubectlFactory kubectl.KubeFactory
 }
 
 // NewKubeResourceFetch provides a new instance of KubeResourceFetch
@@ -52,15 +54,16 @@ func NewKubeResourceFetch(file meta.InstallFile) (*KubeResourceFetch, error) {
 	}
 
 	return &KubeResourceFetch{
-		installation: i,
+		installation:   i,
+		kubectlFactory: kubectl.NewKubeFactory(),
 	}, nil
 }
 
 // Fetch fetches a specific property of the resource identified by the alias
-func (v *KubeResourceFetch) Fetch(alias string, property Property) (data []string, err error) {
+func (f *KubeResourceFetch) Fetch(alias string, property Property) (data []string, err error) {
 	switch property {
 	case ServiceIPProperty:
-		return v.fetchServiceIP(alias)
+		return f.fetchServiceIP(alias)
 	default:
 		err = fmt.Errorf("property '%s' is not supported by kubernetes resource", property)
 	}
@@ -74,7 +77,7 @@ func (f *KubeResourceFetch) fetchServiceIP(alias string) (data []string, err err
 		return
 	}
 
-	k := kubectl.New().Namespace(c.Namespace)
+	k := f.kubectlFactory.NewInstance(c.Namespace)
 	ip, err := kubectl.GetServiceIP(k, c.Name)
 	if err != nil {
 		return

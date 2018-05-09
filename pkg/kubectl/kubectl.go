@@ -73,6 +73,34 @@ type KubeStdinRunner interface {
 	StdinRun(args []string, stdin []byte) (output string, err error)
 }
 
+// KubeAllRunner interface composes various kube runner interfaces
+type KubeAllRunner interface {
+	// KubeRunner interface that provides contracts to invoke commands
+	// against the kubernetes cluster
+	KubeRunner
+	// KubeStdinRunner interface that provides contracts to invoke
+	// commands against the kubernetes cluster
+	KubeStdinRunner
+}
+
+// KubeFactory provides contract(s) to get a new instance of KubeAllRunner
+type KubeFactory interface {
+	NewInstance(namespace string) KubeAllRunner
+}
+
+// kubeFactory implements KubeFactory interface
+type kubeFactory struct{}
+
+// NewKubeFactory returns a new instance of kubeFactory
+func NewKubeFactory() KubeFactory {
+	return &kubeFactory{}
+}
+
+// NewInstance returns a new instance of KubeAllRunner
+func (k *kubeFactory) NewInstance(namespace string) KubeAllRunner {
+	return New().Namespace(namespace)
+}
+
 // Kubectl holds the properties required to execute any kubectl command.
 // Kubectl is an implementation of following interfaces:
 // 1. KubeRunner
