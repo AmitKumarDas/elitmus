@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/AmitKumarDas/litmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
 	"github.com/ghodss/yaml"
 )
 

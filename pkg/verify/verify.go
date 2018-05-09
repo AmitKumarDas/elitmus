@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AmitKumarDas/litmus/pkg/kubectl"
-	"github.com/AmitKumarDas/litmus/pkg/meta"
+	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/meta"
 )
 
 // Condition type defines a condition that can be applied against a component

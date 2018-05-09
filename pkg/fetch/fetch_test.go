@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AmitKumarDas/litmus/pkg/kubectl"
-	"github.com/AmitKumarDas/litmus/pkg/meta"
+	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/meta"
 )
 
 func TestInstanceCreation(t *testing.T) {

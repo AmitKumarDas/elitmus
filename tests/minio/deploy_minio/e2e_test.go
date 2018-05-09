@@ -19,10 +19,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/AmitKumarDas/litmus/pkg/kubectl"
-	"github.com/AmitKumarDas/litmus/pkg/meta"
-	"github.com/AmitKumarDas/litmus/pkg/time"
-	"github.com/AmitKumarDas/litmus/pkg/verify"
+	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/meta"
+	"github.com/AmitKumarDas/elitmus/pkg/time"
+	"github.com/AmitKumarDas/elitmus/pkg/verify"
 	"github.com/DATA-DOG/godog"
 	"github.com/DATA-DOG/godog/gherkin"
 )

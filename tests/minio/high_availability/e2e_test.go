@@ -21,12 +21,12 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/AmitKumarDas/litmus/pkg/exec"
-	"github.com/AmitKumarDas/litmus/pkg/fetch"
-	"github.com/AmitKumarDas/litmus/pkg/kubectl"
-	"github.com/AmitKumarDas/litmus/pkg/meta"
-	"github.com/AmitKumarDas/litmus/pkg/time"
-	"github.com/AmitKumarDas/litmus/pkg/verify"
+	"github.com/AmitKumarDas/elitmus/pkg/exec"
+	"github.com/AmitKumarDas/elitmus/pkg/fetch"
+	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/meta"
+	"github.com/AmitKumarDas/elitmus/pkg/time"
+	"github.com/AmitKumarDas/elitmus/pkg/verify"
 	"github.com/DATA-DOG/godog"
 	"github.com/DATA-DOG/godog/gherkin"
 )

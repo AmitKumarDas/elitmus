@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AmitKumarDas/litmus/pkg/exec"
-	"github.com/AmitKumarDas/litmus/pkg/util"
+	"github.com/AmitKumarDas/elitmus/pkg/exec"
+	"github.com/AmitKumarDas/elitmus/pkg/util"
 )
 
 // KubectlFile is the type to hold various yaml file paths
