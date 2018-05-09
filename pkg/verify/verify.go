@@ -22,6 +22,7 @@ import (
 
 	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
 	"github.com/AmitKumarDas/elitmus/pkg/meta"
+	"github.com/AmitKumarDas/elitmus/pkg/util"
 )
 
 // Condition type defines a condition that can be applied against a component
@@ -418,7 +419,7 @@ func (v *KubeInstallVerify) isEachComponentOnUniqueNode(alias string) (bool, err
 	// get the node of each filtered component
 	for _, f := range filtered {
 		// skip for non pod components
-		if !kubectl.IsPod(f.Kind) {
+		if !util.IsPod(f.Kind) {
 			continue
 		}
 

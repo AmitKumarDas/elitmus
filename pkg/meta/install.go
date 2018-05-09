@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/AmitKumarDas/elitmus/pkg/kubectl"
+	"github.com/AmitKumarDas/elitmus/pkg/util"
 	"github.com/ghodss/yaml"
 )
 
@@ -106,7 +106,7 @@ func (i *Installation) GetMatchingPodComponent(alias string) (comp Component, er
 
 	// filter the components that are pods & match with the provided alias
 	for _, c := range i.Components {
-		if c.Alias == alias && kubectl.IsPod(c.Kind) {
+		if c.Alias == alias && util.IsPod(c.Kind) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -131,7 +131,7 @@ func (i *Installation) GetMatchingServiceComponent(alias string) (comp Component
 
 	// filter the components that are services & match with the provided alias
 	for _, c := range i.Components {
-		if c.Alias == alias && kubectl.IsService(c.Kind) {
+		if c.Alias == alias && util.IsService(c.Kind) {
 			filtered = append(filtered, c)
 		}
 	}
@@ -157,7 +157,7 @@ func (i *Installation) GetJobComponent(alias string) (comp Component, err error)
 
 	// filter the components that are jobs & match with the provided alias
 	for _, c := range i.Components {
-		if c.Alias == alias && kubectl.IsJob(c.Kind) {
+		if c.Alias == alias && util.IsJob(c.Kind) {
 			filtered = append(filtered, c)
 		}
 	}

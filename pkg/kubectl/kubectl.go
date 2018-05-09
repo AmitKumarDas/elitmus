@@ -181,43 +181,6 @@ func (k *Kubectl) StdinRun(args []string, stdin []byte) (output string, err erro
 	return
 }
 
-// IsPod flags if the provided kind is a kubernetes pod or is related
-// to a pod
-func IsPod(kind string) (yes bool) {
-	switch kind {
-	case "po", "pod", "pods", "deploy", "deployment", "deployments", "job", "jobs", "sts", "statefulset", "statefulsets", "ds", "daemonset", "daemonsets":
-		yes = true
-	default:
-		yes = false
-	}
-
-	return
-}
-
-// IsJob flags if the provided kind is a kubernetes job
-func IsJob(kind string) (yes bool) {
-	switch kind {
-	case "job", "jobs":
-		yes = true
-	default:
-		yes = false
-	}
-
-	return
-}
-
-// IsService flags if the provided kind is a kubernetes service
-func IsService(kind string) (yes bool) {
-	switch kind {
-	case "svc", "service", "services":
-		yes = true
-	default:
-		yes = false
-	}
-
-	return
-}
-
 // ArePodsRunning returns true if all the pod(s) are running, false otherwise
 //
 // An example of kubectl get pods & its state:
