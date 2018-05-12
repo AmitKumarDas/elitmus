@@ -17,8 +17,50 @@ limitations under the License.
 package kubectl
 
 import (
+	"os"
 	"testing"
+
+	"github.com/AmitKumarDas/elitmus/pkg/util"
 )
+
+func TestGetKubectlPath(t *testing.T) {
+	if envVal := util.KubectlPathENV(); len(envVal) != 0 {
+		os.Unsetenv(string(util.KubectlPathENVK))
+		defer func() { os.Setenv(string(util.KubectlPathENVK), envVal) }()
+	}
+
+	tests := map[string]struct {
+		kubectlPathVal string
+	}{
+		"get kubectl path: positive test case - with env set - 1": {
+			kubectlPathVal: "Hi",
+		},
+		"get kubectl path: positive test case - with env set - 2": {
+			kubectlPathVal: "There",
+		},
+		"get kubectl path: poisitve test case - env not set": {
+			// no value will be set in env
+			kubectlPathVal: "",
+		},
+	}
+
+	for name, mock := range tests {
+		t.Run(name, func(t *testing.T) {
+			// set a test value in env before testing
+			os.Setenv(string(util.KubectlPathENVK), mock.kubectlPathVal)
+			// function under test
+			p := GetKubectlPath()
+
+			if len(mock.kubectlPathVal) != 0 && mock.kubectlPathVal != p {
+				t.Fatalf("failed to get kubectl path: expected '%s': actual '%s'", mock.kubectlPathVal, p)
+			}
+
+			if len(mock.kubectlPathVal) == 0 && KubectlPath != p {
+				t.Fatalf("failed to get kubectl path: expected '%s': actual '%s'", KubectlPath, p)
+			}
+		})
+	}
+}
 
 func TestKubeCtlArgs(t *testing.T) {
 	tests := map[string]struct {
