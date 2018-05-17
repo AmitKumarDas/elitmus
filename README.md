@@ -85,3 +85,6 @@ $ sudo docker run -w /go/src/github.com/AmitKumarDas/litmus/cmd/mysql_resiliency
 
 ## Appendix
 - Scenario: An example of the system's behavior from one or more user's perspectives
+
+## Best Practices
+- http://itsadeliverything.com/declarative-vs-imperative-gherkin-scenarios-for-cucumber
