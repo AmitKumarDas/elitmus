@@ -47,14 +47,18 @@ const (
 //
 // This has been borrowed from https://github.com/CanopyTax/ckube
 func kubectlArgs(args []string, namespace string, context string, labels string) []string {
+	namespace = strings.TrimSpace(namespace)
+	context = strings.TrimSpace(context)
+	labels = strings.TrimSpace(labels)
+
 	if len(namespace) != 0 {
-		args = append(args, fmt.Sprintf("--namespace=%v", strings.TrimSpace(namespace)))
+		args = append(args, fmt.Sprintf("--namespace=%v", namespace))
 	}
 	if len(context) != 0 {
-		args = append(args, fmt.Sprintf("--context=%v", strings.TrimSpace(context)))
+		args = append(args, fmt.Sprintf("--context=%v", context))
 	}
 	if len(labels) != 0 {
-		args = append(args, fmt.Sprintf("--selector=%v", strings.TrimSpace(labels)))
+		args = append(args, fmt.Sprintf("--selector=%v", labels))
 	}
 	return args
 }
@@ -140,9 +144,6 @@ func New() *Kubectl {
 
 // Namespace sets the namespace to be used during kubectl run
 func (k *Kubectl) Namespace(namespace string) *Kubectl {
-	if len(namespace) == 0 {
-		return k
-	}
 	k.namespace = namespace
 	return k
 }

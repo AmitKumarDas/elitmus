@@ -111,3 +111,102 @@ func TestKubeCtlArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestNamespace(t *testing.T) {
+	tests := map[string]struct {
+		namespace string
+	}{
+		"namespace - +ve test case - non-empty namespace": {
+			namespace: "litmus",
+		},
+		"namespace - +ve test case - empty namespace": {
+			namespace: "",
+		},
+	}
+
+	for name, mock := range tests {
+		t.Run(name, func(t *testing.T) {
+			kctl := New()
+			kctl = kctl.Namespace(mock.namespace)
+
+			if kctl == nil {
+				t.Fatalf("failed to execute namespace: expected 'non nil kubectl': actual 'nil kubectl'")
+			}
+		})
+	}
+}
+
+func TestLabels(t *testing.T) {
+	tests := map[string]struct {
+		label string
+	}{
+		"labels - +ve test case - non-empty label": {
+			label: "name=app",
+		},
+		"labels - +ve test case - empty label": {
+			label: "",
+		},
+	}
+
+	for name, mock := range tests {
+		t.Run(name, func(t *testing.T) {
+			kctl := New()
+			kctl = kctl.Labels(mock.label)
+
+			if kctl == nil {
+				t.Fatalf("failed to execute labels: expected 'non nil kubectl': actual 'nil kubectl'")
+			}
+		})
+	}
+}
+
+func TestContext(t *testing.T) {
+	tests := map[string]struct {
+		context string
+	}{
+		"context - +ve test case - non-empty context": {
+			context: "admin",
+		},
+		"context - +ve test case - empty context": {
+			context: "",
+		},
+	}
+
+	for name, mock := range tests {
+		t.Run(name, func(t *testing.T) {
+			kctl := New()
+			kctl = kctl.Context(mock.context)
+
+			if kctl == nil {
+				t.Fatalf("failed to execute context: expected 'non nil kubectl': actual 'nil kubectl'")
+			}
+		})
+	}
+}
+
+func TestArgs(t *testing.T) {
+	tests := map[string]struct {
+		args []string
+	}{
+		"args - +ve test case - non-empty args": {
+			args: []string{"kubectl"},
+		},
+		"args - +ve test case - empty args": {
+			args: []string{},
+		},
+		"args - +ve test case - nil args": {
+			args: nil,
+		},
+	}
+
+	for name, mock := range tests {
+		t.Run(name, func(t *testing.T) {
+			kctl := New()
+			kctl = kctl.Args(mock.args)
+
+			if kctl == nil {
+				t.Fatalf("failed to execute args: expected 'non nil kubectl': actual 'nil kubectl'")
+			}
+		})
+	}
+}
